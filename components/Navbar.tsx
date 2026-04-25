@@ -1,95 +1,129 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { clearSession, getCart, getSession } from "@/lib/storage";
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import ProfileDropdown from '@/components/ProfileDropdown';
+import { useCart } from '@/context/CartContext';
+import { ensureBrowserSession, signOutUser } from '@/lib/auth';
+import { getSession } from '@/lib/storage';
+import type { SessionUser } from '@/lib/types';
+import './Navbar.css';
 
 const navLinks = [
-  { href: "/home", label: "Home" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-  { href: "/cart", label: "Cart" },
+  { href: '/', label: 'Home' },
+  { href: '/shop', label: 'Shop' },
+  { href: '/about', label: 'About' },
+  { href: '/contact', label: 'Contact' },
 ];
+
+const authLinks = [
+  { href: '/login', label: 'Log In', className: 'auth-link auth-link-outline' },
+  { href: '/register', label: 'Register', className: 'auth-link auth-link-filled' },
+];
+
+function CartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.75 5.25h1.56c.49 0 .92.34 1.03.82l.3 1.43m0 0 1.18 5.56c.1.46.5.79.97.79h7.66c.47 0 .88-.32.98-.77l1.21-5.27a1 1 0 0 0-.98-1.23H6.64Z" />
+      <path d="M10 18.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm8 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z" />
+    </svg>
+  );
+}
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
-  const [username, setUsername] = useState("");
+  const { getTotalItems } = useCart();
+  const cartCount = getTotalItems();
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
-    const syncState = () => {
-      const cart = getCart();
-      const session = getSession();
-
-      setCartCount(cart.reduce((total, item) => total + item.quantity, 0));
-      setUsername(session?.username ?? "");
+    const syncSession = () => {
+      setSessionUser(getSession());
     };
 
-    syncState();
-    window.addEventListener("cart-updated", syncState);
-    window.addEventListener("session-updated", syncState);
-    window.addEventListener("storage", syncState);
+    syncSession();
+    void ensureBrowserSession().then(syncSession);
+
+    window.addEventListener('session-updated', syncSession);
+    window.addEventListener('storage', syncSession);
 
     return () => {
-      window.removeEventListener("cart-updated", syncState);
-      window.removeEventListener("session-updated", syncState);
-      window.removeEventListener("storage", syncState);
+      window.removeEventListener('session-updated', syncSession);
+      window.removeEventListener('storage', syncSession);
     };
   }, []);
 
-  const handleLogout = () => {
-    setMenuOpen(false);
-    clearSession();
-    router.push("/");
+  const handleSignOut = async () => {
+    try {
+      await signOutUser();
+      setSessionUser(null);
+      router.push('/');
+    } catch (error) {
+      console.error('Failed to sign out:', error);
+    }
+  };
+
+  const handleProfileSaved = () => {
+    setSessionUser(getSession());
   };
 
   return (
-    <header className="site-navbar">
-      <div className="navbar-inner">
-        <Link href="/home" className="brand-block">
-          <span className="brand-title">Rosette Boutique</span>
-          <span className="brand-subtitle">Cute, classy, and softly styled</span>
+    <nav className="navbar" aria-label="Primary">
+      <div className="navbar-container">
+        <Link href="/" className="navbar-logo" aria-label="PRELOVE SHOP home">
+          PRELOVE SHOP
         </Link>
 
-        <button
-          type="button"
-          className="navbar-toggle"
-          onClick={() => setMenuOpen((previous) => !previous)}
-          aria-label="Toggle navigation menu"
-        >
-          Menu
-        </button>
+        <ul className="nav-menu">
+          {navLinks.map((link) => {
+            const isActive =
+              link.href === '/' ? pathname === link.href : pathname.startsWith(link.href);
 
-        <div className={`navbar-menu ${menuOpen ? "open" : ""}`}>
-          <nav className="navbar-links">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`navbar-link ${
-                  pathname === link.href ? "active" : ""
-                }`}
-                onClick={() => setMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+            return (
+              <li key={link.href} className="nav-item">
+                <Link
+                  href={link.href}
+                  className={`nav-link${isActive ? ' active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
 
-          <div className="navbar-utilities">
-            <span className="counter-badge">Cart {cartCount}</span>
-            {username ? (
-              <span className="welcome-badge">Hi, {username}</span>
-            ) : null}
-            <button type="button" className="nav-button" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
+        <div className="navbar-actions">
+          {sessionUser ? (
+            <ProfileDropdown
+              user={sessionUser}
+              onLogout={handleSignOut}
+              onProfileSaved={handleProfileSaved}
+            />
+          ) : (
+            authLinks.map((link) => {
+              const isActive = pathname === link.href;
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`${link.className}${isActive ? ' active' : ''}`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })
+          )}
+
+          <Link href="/cart" className="cart-icon" aria-label="Open cart">
+            <CartIcon />
+            {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+          </Link>
         </div>
       </div>
-    </header>
+    </nav>
   );
 }

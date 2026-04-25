@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { CartProvider } from "@/context/CartContext";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rosette Boutique",
-  description: "A pastel pink online clothing boutique built with Next.js.",
+  title: "PRELOVE SHOP - Fashion for Everyone",
+  description: "Give clothes a second chance. Premium pre-loved fashion at affordable prices.",
 };
 
 export default function RootLayout({
@@ -13,7 +16,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <CartProvider>
+          <Navbar />
+          {children}
+          <Footer />
+        </CartProvider>
+      </body>
     </html>
   );
 }

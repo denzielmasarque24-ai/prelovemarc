@@ -1,7 +1,8 @@
 export type ProductCategory = "Tops" | "Bottoms" | "Dresses";
+export type ProductId = number | string;
 
 export interface Product {
-  id: number;
+  id: ProductId;
   name: string;
   price: number;
   image: string;
@@ -9,17 +10,20 @@ export interface Product {
   description: string;
 }
 
-export interface User {
-  fullName: string;
-  email: string;
-  username: string;
-  phoneNumber: string;
-  password: string;
-}
-
 export interface SessionUser {
   fullName: string;
-  username: string;
+  email: string;
+}
+
+export interface Profile {
+  id: string;
+  name: string | null;
+  email: string | null;
+  username: string | null;
+  phone: string | null;
+  avatar: string | null;
+  role: string | null;
+  created_at: string | null;
 }
 
 export interface CartItem extends Product {

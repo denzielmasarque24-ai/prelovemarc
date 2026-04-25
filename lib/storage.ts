@@ -1,8 +1,8 @@
 "use client";
 
-import { CartItem, Product, SessionUser, User } from "@/lib/types";
+import { supabase } from "@/lib/supabaseClient";
+import { CartItem, Product, ProductId, SessionUser } from "@/lib/types";
 
-const USERS_KEY = "rosette-users";
 const SESSION_KEY = "rosette-session";
 const CART_KEY = "rosette-cart";
 
@@ -34,6 +34,14 @@ function writeJSON<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function storeCartLocally(cart: CartItem[], shouldDispatch = true) {
+  writeJSON(CART_KEY, cart);
+
+  if (shouldDispatch) {
+    dispatchUpdate("cart-updated");
+  }
+}
+
 function dispatchUpdate(eventName: string) {
   if (!isBrowser()) {
     return;
@@ -42,38 +50,214 @@ function dispatchUpdate(eventName: string) {
   window.dispatchEvent(new Event(eventName));
 }
 
-export function getUsers() {
-  return readJSON<User[]>(USERS_KEY, []);
-}
-
-export function saveUser(user: User) {
-  const users = getUsers();
-  users.push(user);
-  writeJSON(USERS_KEY, users);
-}
-
-export function findUser(username: string, password: string) {
-  const normalizedUsername = username.trim().toLowerCase();
-
-  return getUsers().find(
-    (user) =>
-      user.username.trim().toLowerCase() === normalizedUsername &&
-      user.password === password,
+function isUuid(value: ProductId) {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
   );
 }
 
-export function usernameExists(username: string) {
-  const normalizedUsername = username.trim().toLowerCase();
-  return getUsers().some(
-    (user) => user.username.trim().toLowerCase() === normalizedUsername,
-  );
+function readStringField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
 }
 
-export function emailExists(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  return getUsers().some(
-    (user) => user.email.trim().toLowerCase() === normalizedEmail,
-  );
+async function getSupabaseUserId() {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    console.error("Failed to read Supabase user for cart sync:", error);
+    return null;
+  }
+
+  return session?.user?.id ?? null;
+}
+
+async function resolveSupabaseCartItems(cart: CartItem[]) {
+  const unresolvedItems = cart.filter((item) => !isUuid(item.id));
+
+  if (!unresolvedItems.length) {
+    return cart;
+  }
+
+  const { data, error } = await supabase.from("products").select("*");
+
+  if (error) {
+    console.warn("Unable to resolve Supabase product IDs for cart sync; keeping local cart only.", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    return cart;
+  }
+
+  const rows = ((data ?? []) as Record<string, unknown>[])
+    .map((row) => {
+      const id = row.id;
+
+      if (!isUuid(typeof id === "string" ? id : "")) {
+        return null;
+      }
+
+      return {
+        id,
+        name: readStringField(row, ["name", "product_name", "title"]),
+        image: readStringField(row, ["image", "image_url", "photo", "photo_url"]),
+      };
+    })
+    .filter((row): row is { id: string; name: string | null; image: string | null } => Boolean(row));
+
+  const byName = new Map(rows.filter((row) => row.name).map((row) => [row.name as string, row.id]));
+  const byImage = new Map(rows.filter((row) => row.image).map((row) => [row.image as string, row.id]));
+
+  let hasChanges = false;
+  const upgradedCart = cart.map((item) => {
+    if (isUuid(item.id)) {
+      return item;
+    }
+
+    const resolvedId = byName.get(item.name) ?? byImage.get(item.image);
+
+    if (!resolvedId) {
+      return item;
+    }
+
+    hasChanges = true;
+    return {
+      ...item,
+      id: resolvedId,
+    };
+  });
+
+  if (hasChanges) {
+    storeCartLocally(upgradedCart);
+  }
+
+  return upgradedCart;
+}
+
+async function syncCartToSupabase(cart: CartItem[]) {
+  const userId = await getSupabaseUserId();
+
+  if (!userId) {
+    return;
+  }
+
+  const resolvedCart = await resolveSupabaseCartItems(cart);
+  const syncedItems = resolvedCart.filter((item) => isUuid(item.id));
+
+  if (!cart.length) {
+    const { error: deleteError } = await supabase
+      .from("cart_items")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      console.error("Failed clearing cart_items before sync:", deleteError);
+    }
+
+    return;
+  }
+
+  if (!syncedItems.length) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("cart_items")
+    .delete()
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    console.error("Failed clearing cart_items before sync:", deleteError);
+    return;
+  }
+
+  const payload = syncedItems.map((item) => ({
+    user_id: userId,
+    product_id: item.id,
+    quantity: item.quantity,
+  }));
+
+  const { error: insertError } = await supabase.from("cart_items").insert(payload);
+
+  if (insertError) {
+    console.error("Failed syncing cart_items to Supabase:", insertError);
+  }
+}
+
+export async function hydrateCartFromSupabase() {
+  const userId = await getSupabaseUserId();
+  const localCart = getCart();
+
+  if (!userId) {
+    return localCart;
+  }
+
+  const { data: cartRows, error: cartError } = await supabase
+    .from("cart_items")
+    .select("product_id, quantity")
+    .eq("user_id", userId);
+
+  if (cartError) {
+    console.error("Failed loading cart_items from Supabase:", cartError);
+    return localCart;
+  }
+
+  const rows = (cartRows ?? []) as { product_id: string; quantity: number }[];
+
+  if (!rows.length) {
+    return localCart;
+  }
+
+  const productIds = rows.map((row) => row.product_id);
+  const { data: productRows, error: productsError } = await supabase
+    .from("products")
+    .select("id, name, price, image, category, description")
+    .in("id", productIds);
+
+  if (productsError) {
+    console.error("Failed loading products for cart_items:", productsError);
+    return localCart;
+  }
+
+  const products = (productRows ?? []) as Product[];
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const cart = rows
+    .map((row) => {
+      const product = productMap.get(row.product_id);
+
+      if (!product) {
+        return null;
+      }
+
+      return {
+        ...product,
+        quantity: row.quantity,
+      };
+    })
+    .filter((item): item is CartItem => Boolean(item));
+
+  if (!cart.length) {
+    return localCart;
+  }
+
+  const localOnlyItems = localCart.filter((item) => !isUuid(item.id));
+  const mergedCart = [...cart, ...localOnlyItems];
+
+  saveCart(mergedCart);
+  return mergedCart;
 }
 
 export function setSession(user: SessionUser) {
@@ -99,8 +283,8 @@ export function getCart() {
 }
 
 export function saveCart(cart: CartItem[]) {
-  writeJSON(CART_KEY, cart);
-  dispatchUpdate("cart-updated");
+  storeCartLocally(cart);
+  void syncCartToSupabase(cart);
 }
 
 export function addToCart(product: Product) {
@@ -116,7 +300,7 @@ export function addToCart(product: Product) {
   saveCart(cart);
 }
 
-export function removeFromCart(productId: number) {
+export function removeFromCart(productId: ProductId) {
   const updatedCart = getCart().filter((item) => item.id !== productId);
   saveCart(updatedCart);
 }
@@ -128,4 +312,5 @@ export function clearCart() {
 
   window.localStorage.removeItem(CART_KEY);
   dispatchUpdate("cart-updated");
+  void syncCartToSupabase([]);
 }

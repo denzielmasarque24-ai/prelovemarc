@@ -1,3 +1,6 @@
+"use client";
+
+import { useId, useState } from "react";
 import Image from "next/image";
 
 interface ProductCardProps {
@@ -13,22 +16,38 @@ export default function ProductCard({
   image,
   name,
   price,
-  category,
   description,
   onAddToCart,
 }: ProductCardProps) {
+  const [showDetails, setShowDetails] = useState(false);
+  const detailsId = useId();
+
   return (
-    <article className="product-card">
+    <article className="product-card boutique-card">
       <div className="product-image">
-        <Image src={image} alt={name} width={500} height={620} priority={false} />
+        <Image src={image} alt={name} width={500} height={620} />
       </div>
       <div className="product-body">
-        <span className="product-tag">{category}</span>
-        <div className="product-topline">
-          <h3>{name}</h3>
-          <span className="product-price">₱{price.toLocaleString()}</span>
+        <h3>{name}</h3>
+        <span className="product-price">PHP {price.toLocaleString()}</span>
+        <button
+          type="button"
+          className="product-details-toggle"
+          aria-expanded={showDetails}
+          aria-controls={detailsId}
+          onClick={() => setShowDetails((current) => !current)}
+        >
+          {showDetails ? "Hide Details" : "View Details"}
+        </button>
+        <div
+          id={detailsId}
+          className={`product-details${showDetails ? " open" : ""}`}
+          aria-hidden={!showDetails}
+        >
+          {description.split("\n").map((line, index) => (
+            <p key={`${detailsId}-${index}`}>{line || "\u00A0"}</p>
+          ))}
         </div>
-        <p>{description}</p>
         <button type="button" className="product-button" onClick={onAddToCart}>
           Add to Cart
         </button>

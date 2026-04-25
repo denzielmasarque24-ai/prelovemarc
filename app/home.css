@@ -1,0 +1,17 @@
+.featured-section {
+  padding: 4rem 2rem;
+  background-color: white;
+}
+
+.featured-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.featured-title {
+  text-align: center;
+  font-size: 1.8rem;
+  color: #333;
+  margin: 0 0 3rem 0;
+  font-weight: 500;
+}

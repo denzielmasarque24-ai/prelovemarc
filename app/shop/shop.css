@@ -1,0 +1,99 @@
+.shop-main {
+  min-height: calc(100vh - 200px);
+  background-color: #fafafa;
+  padding: 3rem 2rem;
+}
+
+.shop-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.shop-title {
+  text-align: center;
+  font-size: 2rem;
+  color: #333;
+  margin: 0 0 2rem 0;
+  font-weight: 500;
+}
+
+.category-filter {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 3rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.7rem 1.5rem;
+  border: 2px solid #d4a5b4;
+  background-color: white;
+  color: #d4a5b4;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: capitalize;
+}
+
+.filter-btn:hover {
+  background-color: #fce8f3;
+}
+
+.filter-btn.active {
+  background-color: #d4a5b4;
+  color: white;
+}
+
+.products-wrapper {
+  margin-top: 2rem;
+}
+
+.no-products {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #999;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .shop-main {
+    padding: 2rem 1.5rem;
+  }
+
+  .shop-title {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .category-filter {
+    gap: 0.8rem;
+    margin-bottom: 2rem;
+  }
+
+  .filter-btn {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .shop-main {
+    padding: 1.5rem 1rem;
+  }
+
+  .shop-title {
+    font-size: 1.3rem;
+  }
+
+  .category-filter {
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+}

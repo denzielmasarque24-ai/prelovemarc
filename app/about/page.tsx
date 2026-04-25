@@ -1,42 +1,43 @@
-import Footer from "@/components/Footer";
-import Navbar from "@/components/Navbar";
+import type { Metadata } from 'next';
+import './about.css';
+
+export const metadata: Metadata = {
+  title: 'PRELOVE SHOP - About Us',
+  description: 'Learn about PRELOVE SHOP and our mission.',
+};
 
 export default function AboutPage() {
   return (
-    <div className="page-shell">
-      <Navbar />
+    <main className="about-main">
+      <p className="sr-only">About Page Working</p>
 
-      <main className="page-content">
-        <section className="story-grid">
-          <article className="story-card">
-            <span className="eyebrow">About Our Boutique</span>
-            <h1>Rosette Boutique celebrates gentle style and graceful details.</h1>
-            <p>
-              Our boutique was imagined as a soft corner for fashion lovers who
-              adore pastel tones, feminine cuts, and polished everyday outfits.
-              Every collection is inspired by blush petals, morning light, and
-              romantic confidence.
-            </p>
-            <p>
-              We believe clothing should feel beautiful, wearable, and easy to
-              style. That is why our picks focus on delicate silhouettes,
-              flattering shapes, and elegant textures you can mix effortlessly.
-            </p>
-          </article>
+      <div className="about-container">
+        <h1 className="about-title">ABOUT US</h1>
 
-          <article className="story-card">
-            <span className="eyebrow">Why We Shine</span>
-            <ul>
-              <li>Thoughtfully curated pastel clothing for a charming boutique feel.</li>
-              <li>Responsive and beginner-friendly shopping experience.</li>
-              <li>Soft colors, gentle layouts, and clean product presentation.</li>
-              <li>Designed for shoppers who love sweet and classy fashion.</li>
-            </ul>
-          </article>
-        </section>
-      </main>
+        <div className="about-content">
+          <p className="about-text">
+            PRELOVE SHOP gives pre-loved clothes a second chance. We offer
+            affordable, stylish pieces while promoting sustainable and
+            eco-friendly fashion. Every item is carefully selected and prepared
+            to be loved again.
+          </p>
+        </div>
 
-      <Footer />
-    </div>
+        <div className="about-values">
+          <div className="value-card">
+            <h3>Sustainable</h3>
+            <p>Promoting eco-friendly fashion through thoughtfully sourced pieces.</p>
+          </div>
+          <div className="value-card">
+            <h3>Quality</h3>
+            <p>Every item is selected for style, comfort, and dependable condition.</p>
+          </div>
+          <div className="value-card">
+            <h3>Affordable</h3>
+            <p>Stylish fashion at prices that stay practical for everyday shoppers.</p>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }

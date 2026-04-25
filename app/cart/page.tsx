@@ -1,123 +1,183 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import Footer from "@/components/Footer";
-import Navbar from "@/components/Navbar";
-import { clearCart, getCart, getSession, removeFromCart } from "@/lib/storage";
-import { CartItem } from "@/lib/types";
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import type { CartItem, ProductId } from '@/lib/types';
+import {
+  clearCart as clearStoredCart,
+  getCart,
+  hydrateCartFromSupabase,
+  removeFromCart,
+  saveCart,
+} from '@/lib/storage';
+import './cart.css';
+
+const pesoFormatter = new Intl.NumberFormat('en-PH', {
+  style: 'currency',
+  currency: 'PHP',
+});
+
+function formatPrice(price: number) {
+  return pesoFormatter.format(price / 100);
+}
 
 export default function CartPage() {
-  const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   useEffect(() => {
-    if (!getSession()) {
-      router.replace("/login");
-      return;
-    }
-
     const syncCart = () => {
       setCartItems(getCart());
     };
 
     syncCart();
-    window.addEventListener("cart-updated", syncCart);
-    window.addEventListener("storage", syncCart);
+    void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
+    window.addEventListener('cart-updated', syncCart);
+    window.addEventListener('storage', syncCart);
+    window.addEventListener('session-updated', () => {
+      void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
+    });
 
     return () => {
-      window.removeEventListener("cart-updated", syncCart);
-      window.removeEventListener("storage", syncCart);
+      window.removeEventListener('cart-updated', syncCart);
+      window.removeEventListener('storage', syncCart);
     };
-  }, [router]);
+  }, []);
 
-  const totalPrice = useMemo(() => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0,
+  const total = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [cartItems],
+  );
+
+  const handleUpdateQuantity = (productId: ProductId, quantity: number) => {
+    if (quantity <= 0) {
+      removeFromCart(productId);
+      setCartItems(getCart());
+      return;
+    }
+
+    const updatedCart = cartItems.map((item) =>
+      item.id === productId ? { ...item, quantity } : item,
     );
-  }, [cartItems]);
 
-  const handleRemoveItem = (productId: number) => {
+    saveCart(updatedCart);
+    setCartItems(updatedCart);
+  };
+
+  const handleRemove = (productId: ProductId) => {
     removeFromCart(productId);
     setCartItems(getCart());
   };
 
-  const handleCheckout = () => {
-    if (cartItems.length === 0) {
-      window.alert("Your cart is empty. Add some items first.");
-      return;
-    }
-
-    window.alert("Checkout successful! Thank you for shopping at Rosette Boutique.");
-    clearCart();
+  const handleClearCart = () => {
+    clearStoredCart();
     setCartItems([]);
   };
 
-  return (
-    <div className="page-shell">
-      <Navbar />
+  if (cartItems.length === 0) {
+    return (
+      <main className="cart-main">
+        <p className="sr-only">Cart Page Working</p>
 
-      <main className="page-content section-block">
-        <div className="cart-header section-heading">
-          <div>
-            <span className="eyebrow">Your Shopping Bag</span>
-            <h1>Cart</h1>
+        <div className="cart-container">
+          <h1 className="cart-title">YOUR CART</h1>
+          <div className="empty-cart">
+            <p>Your cart is empty.</p>
+            <Link href="/shop" className="continue-shopping-btn">
+              Continue Shopping
+            </Link>
           </div>
-          <p>Review your selected pieces before checkout.</p>
         </div>
+      </main>
+    );
+  }
 
-        <section className="cart-layout">
-          <div className="cart-list">
-            {cartItems.length === 0 ? (
-              <div className="empty-state">
-                Your cart is empty for now. Visit the home page and add a few
-                lovely pieces.
-              </div>
-            ) : (
-              cartItems.map((item) => (
-                <article key={item.id} className="cart-item">
-                  <div className="cart-thumb">
-                    <Image src={item.image} alt={item.name} width={180} height={220} />
+  return (
+    <main className="cart-main">
+      <p className="sr-only">Cart Page Working</p>
+
+      <div className="cart-container">
+        <h1 className="cart-title">YOUR CART</h1>
+
+        <div className="cart-content">
+          <div className="cart-items">
+            {cartItems.map((item) => {
+              const itemTotal = item.price * item.quantity;
+
+              return (
+                <div key={item.id} className="cart-item">
+                  <div className="item-image">
+                    <img src={item.image} alt={item.name} />
                   </div>
 
-                  <div className="cart-meta">
-                    <h3>{item.name}</h3>
-                    <span className="cart-price">₱{item.price.toLocaleString()}</span>
-                    <span>Quantity: {item.quantity}</span>
-                    <span>Category: {item.category}</span>
+                  <div className="item-details">
+                    <h3 className="item-name">{item.name}</h3>
+                    <p className="item-price">{formatPrice(item.price)}</p>
+                  </div>
+
+                  <div className="item-quantity">
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                      aria-label={`Decrease quantity of ${item.name}`}
+                    >
+                      -
+                    </button>
+                    <span className="qty-value">{item.quantity}</span>
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                      aria-label={`Increase quantity of ${item.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="item-total">
+                    <p className="total-price">{formatPrice(itemTotal)}</p>
                   </div>
 
                   <button
                     type="button"
-                    className="button-secondary"
-                    onClick={() => handleRemoveItem(item.id)}
+                    className="remove-btn"
+                    onClick={() => handleRemove(item.id)}
+                    aria-label={`Remove ${item.name} from cart`}
                   >
-                    Remove
+                    x
                   </button>
-                </article>
-              ))
-            )}
+                </div>
+              );
+            })}
           </div>
 
-          <aside className="summary-box">
-            <div className="summary-total">
-              <p>Total Items</p>
-              <strong>{cartItems.reduce((total, item) => total + item.quantity, 0)}</strong>
+          <div className="cart-summary">
+            <div className="summary-row">
+              <span>Subtotal:</span>
+              <span>{formatPrice(total)}</span>
             </div>
-            <div className="summary-total">
-              <p>Total Price</p>
-              <strong>₱{totalPrice.toLocaleString()}</strong>
+            <div className="summary-row">
+              <span>Shipping:</span>
+              <span>TBD</span>
             </div>
-            <button type="button" className="button-primary" onClick={handleCheckout}>
-              Checkout
-            </button>
-          </aside>
-        </section>
-      </main>
+            <div className="summary-divider" />
+            <div className="summary-row total-row">
+              <span>Total:</span>
+              <span>{formatPrice(total)}</span>
+            </div>
 
-      <Footer />
-    </div>
+            <button type="button" className="checkout-btn">
+              Proceed to Checkout
+            </button>
+            <Link href="/shop" className="continue-shopping-btn continue-btn">
+              Continue Shopping
+            </Link>
+            <button type="button" className="clear-btn" onClick={handleClearCart}>
+              Clear Cart
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
