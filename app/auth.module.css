@@ -80,6 +80,20 @@
   box-shadow: 0 0 0 4px rgba(232, 160, 191, 0.14);
 }
 
+.card :global(.form-field input.input-error) {
+  background: #fff7f8;
+  border-color: #d65f77;
+  box-shadow: 0 0 0 4px rgba(214, 95, 119, 0.12);
+}
+
+.card :global(.field-error) {
+  color: #b2435c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: -0.15rem 0 0;
+}
+
 .card :global(.form-grid) {
   display: grid;
   gap: 1rem;
@@ -121,6 +135,53 @@
   width: 18px;
 }
 
+.card :global(.password-strength) {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: -0.1rem;
+}
+
+.card :global(.password-strength span) {
+  background: #f8d7da;
+  border-radius: 999px;
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.card :global(.password-strength span::after) {
+  border-radius: inherit;
+  content: "";
+  display: block;
+  height: 100%;
+  transition:
+    background-color 0.2s ease,
+    width 0.2s ease;
+}
+
+.card :global(.password-strength.weak span::after) {
+  background: #d65f77;
+  width: 34%;
+}
+
+.card :global(.password-strength.good span::after) {
+  background: #d98fae;
+  width: 68%;
+}
+
+.card :global(.password-strength.strong span::after) {
+  background: #8fbf9f;
+  width: 100%;
+}
+
+.card :global(.password-strength p) {
+  color: #7a6a6f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0;
+}
+
 .card :global(.message-banner) {
   border-radius: 16px;
   font-size: 0.93rem;
@@ -140,12 +201,16 @@
 }
 
 .card :global(.auth-submit-button) {
+  align-items: center;
   background: linear-gradient(135deg, #e8a0bf 0%, #d98fae 100%);
   border: none;
   border-radius: 999px;
   box-shadow: 0 16px 28px rgba(232, 160, 191, 0.18);
   color: #ffffff;
+  display: inline-flex;
   font-weight: 700;
+  gap: 0.6rem;
+  justify-content: center;
   min-height: 52px;
   transition:
     transform 0.2s ease,
@@ -163,11 +228,26 @@
   transform: none;
 }
 
+.card :global(.button-spinner) {
+  animation: auth-spin 0.8s linear infinite;
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  border-radius: 50%;
+  border-top-color: #ffffff;
+  height: 18px;
+  width: 18px;
+}
+
 .card :global(.auth-switch-line) {
   color: #7a6a6f;
   display: flex;
   gap: 0.45rem;
   justify-content: center;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .card :global(.auth-inline-link) {

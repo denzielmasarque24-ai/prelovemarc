@@ -115,14 +115,6 @@ export async function saveProfile(userId: string, profile: ProfilePayload) {
     role: "user",
   };
 
-  const { data: sessionData } = await supabase.auth.getSession();
-
-  if (sessionData.session?.user.id !== userId) {
-    throw new Error(
-      "Your account was created, but your user record could not be saved yet. Confirm your email and try again.",
-    );
-  }
-
   const { error } = await supabase.from("users").upsert(payload, { onConflict: "id" });
 
   if (error) {
@@ -166,8 +158,6 @@ export async function getProfile() {
   const fallbackName =
     typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()
       ? user.user_metadata.full_name.trim()
-      : typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
-        ? user.user_metadata.name.trim()
       : getFallbackFullName(user.email);
 
   const defaultProfile = {

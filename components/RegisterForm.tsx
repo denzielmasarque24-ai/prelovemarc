@@ -9,7 +9,40 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const emailConfirmationMessage = "Account created. Please verify your email.";
+const emailConfirmationMessage = "Account created successfully! Please check your email to confirm.";
+
+type FieldErrors = Partial<Record<keyof RegisterFormState, string>>;
+
+type RegisterFormState = {
+  fullName: string;
+  email: string;
+  username: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+};
+
+function mapRegistrationError(message?: string) {
+  if (!message) {
+    return "Sign up failed. Please try again.";
+  }
+
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("user already registered")) {
+    return "This email is already registered. Please log in.";
+  }
+
+  if (normalized.includes("duplicate key") && normalized.includes("username")) {
+    return "This username is already in use.";
+  }
+
+  if (normalized.includes("duplicate key") && normalized.includes("email")) {
+    return "This email is already registered. Please log in.";
+  }
+
+  return message;
+}
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -45,10 +78,11 @@ export default function RegisterForm({
   const router = useRouter();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegisterFormState>({
     fullName: "",
     email: "",
     username: "",
@@ -56,41 +90,74 @@ export default function RegisterForm({
     password: "",
     confirmPassword: "",
   });
+  const passwordStrength =
+    formData.password.length >= 10
+      ? "strong"
+      : formData.password.length >= 6
+        ? "good"
+        : formData.password.length > 0
+          ? "weak"
+          : "";
+
+  const validateForm = () => {
+    const errors: FieldErrors = {};
+    const normalizedEmail = formData.email.trim().toLowerCase();
+    const normalizedPassword = formData.password.trim();
+    const normalizedConfirmPassword = formData.confirmPassword.trim();
+
+    if (!formData.fullName.trim()) {
+      errors.fullName = "Full name is required.";
+    }
+
+    if (!normalizedEmail) {
+      errors.email = "Email is required.";
+    } else if (!emailPattern.test(normalizedEmail)) {
+      errors.email = "Please enter a valid email address.";
+    }
+
+    if (!normalizedPassword) {
+      errors.password = "Password is required.";
+    } else if (normalizedPassword.length < 6) {
+      errors.password = "Password must be at least 6 characters.";
+    }
+
+    if (!normalizedConfirmPassword) {
+      errors.confirmPassword = "Please confirm your password.";
+    } else if (normalizedPassword !== normalizedConfirmPassword) {
+      errors.confirmPassword = "Passwords must match.";
+    }
+
+    return errors;
+  };
+
+  const updateField = (field: keyof RegisterFormState, value: string) => {
+    setFormData((previous) => ({ ...previous, [field]: value }));
+    setFieldErrors((previous) => {
+      if (!previous[field]) {
+        return previous;
+      }
+
+      const next = { ...previous };
+      delete next[field];
+      return next;
+    });
+  };
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setSuccess("");
+    setFieldErrors({});
 
-    const { fullName, email, username, phone, password, confirmPassword } = formData;
+    const { fullName, email, username, phone, password } = formData;
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
-    const normalizedConfirmPassword = confirmPassword.trim();
 
-    if (
-      !fullName.trim() ||
-      !normalizedEmail ||
-      !username.trim() ||
-      !phone.trim() ||
-      !normalizedPassword ||
-      !normalizedConfirmPassword
-    ) {
-      setError("Please complete all fields before signing up.");
-      return;
-    }
+    const validationErrors = validateForm();
 
-    if (!emailPattern.test(normalizedEmail)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
-    if (normalizedPassword.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    if (normalizedPassword !== normalizedConfirmPassword) {
-      setError("Password and confirm password must match.");
+    if (Object.keys(validationErrors).length) {
+      setFieldErrors(validationErrors);
+      setError("Please fix the highlighted fields.");
       return;
     }
 
@@ -102,7 +169,7 @@ export default function RegisterForm({
         password: normalizedPassword,
         options: {
           data: {
-            name: fullName.trim(),
+            full_name: fullName.trim(),
             username: username.trim(),
             phone: phone.trim(),
           },
@@ -110,32 +177,44 @@ export default function RegisterForm({
       });
 
       if (signUpError || !data.user) {
-        setError(signUpError?.message || "Sign up failed. Please try again.");
+        setError(mapRegistrationError(signUpError?.message));
         return;
       }
 
       const profileDetails = {
-        fullName,
+        fullName: fullName.trim(),
         email: normalizedEmail,
-        username,
-        phone,
+        username: username.trim(),
+        phone: phone.trim(),
       };
 
-      rememberPendingProfile(data.user.id, profileDetails);
+      const { error: upsertError } = await supabase.from("users").upsert(
+        {
+          id: data.user.id,
+          email: data.user.email ?? normalizedEmail,
+          full_name: fullName.trim(),
+          username: username.trim(),
+          phone: phone.trim(),
+          role: "user",
+          address: "",
+          avatar: "",
+        },
+        { onConflict: "id" },
+      );
+
+      if (upsertError) {
+        rememberPendingProfile(data.user.id, profileDetails);
+        if (data.session) {
+          setError(mapRegistrationError(upsertError.message));
+          return;
+        }
+      }
 
       if (data.session) {
         await syncSessionFromUser(data.user.id, data.user.email);
-
-        if (variant === "page") {
-          router.push("/shop");
-          return;
-        }
-
-        onClose?.();
-        return;
       }
 
-      setSuccess(emailConfirmationMessage);
+      setSuccess(data.session ? "Account created successfully." : emailConfirmationMessage);
       setFormData({
         fullName: "",
         email: "",
@@ -144,9 +223,26 @@ export default function RegisterForm({
         password: "",
         confirmPassword: "",
       });
+
+      if (variant === "page") {
+        router.push("/login");
+        return;
+      }
+
+      if (data.session) {
+        if (onSwitchToLogin) {
+          onSwitchToLogin();
+        } else {
+          onClose?.();
+        }
+      }
     } catch (authError) {
       console.error("Modal sign-up error:", authError);
-      setError("We could not finish creating your account. Please try again.");
+      setError(
+        authError instanceof Error
+          ? mapRegistrationError(authError.message)
+          : "We could not finish creating your account. Please try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -170,13 +266,19 @@ export default function RegisterForm({
             id="modal-signup-name"
             type="text"
             value={formData.fullName}
-            onChange={(event) =>
-              setFormData((previous) => ({ ...previous, fullName: event.target.value }))
-            }
+            onChange={(event) => updateField("fullName", event.target.value)}
             placeholder="Your full name"
             autoComplete="name"
+            className={fieldErrors.fullName ? "input-error" : undefined}
+            aria-invalid={Boolean(fieldErrors.fullName)}
+            aria-describedby={fieldErrors.fullName ? "modal-signup-name-error" : undefined}
             required
           />
+          {fieldErrors.fullName ? (
+            <p className="field-error" id="modal-signup-name-error">
+              {fieldErrors.fullName}
+            </p>
+          ) : null}
         </div>
         <div className="form-field">
           <label htmlFor="modal-signup-email">Email</label>
@@ -184,13 +286,19 @@ export default function RegisterForm({
             id="modal-signup-email"
             type="email"
             value={formData.email}
-            onChange={(event) =>
-              setFormData((previous) => ({ ...previous, email: event.target.value }))
-            }
+            onChange={(event) => updateField("email", event.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
+            className={fieldErrors.email ? "input-error" : undefined}
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={fieldErrors.email ? "modal-signup-email-error" : undefined}
             required
           />
+          {fieldErrors.email ? (
+            <p className="field-error" id="modal-signup-email-error">
+              {fieldErrors.email}
+            </p>
+          ) : null}
         </div>
         <div className="form-field">
           <label htmlFor="modal-signup-username">Username</label>
@@ -198,13 +306,18 @@ export default function RegisterForm({
             id="modal-signup-username"
             type="text"
             value={formData.username}
-            onChange={(event) =>
-              setFormData((previous) => ({ ...previous, username: event.target.value }))
-            }
+            onChange={(event) => updateField("username", event.target.value)}
             placeholder="yourusername"
             autoComplete="username"
-            required
+            className={fieldErrors.username ? "input-error" : undefined}
+            aria-invalid={Boolean(fieldErrors.username)}
+            aria-describedby={fieldErrors.username ? "modal-signup-username-error" : undefined}
           />
+          {fieldErrors.username ? (
+            <p className="field-error" id="modal-signup-username-error">
+              {fieldErrors.username}
+            </p>
+          ) : null}
         </div>
         <div className="form-field">
           <label htmlFor="modal-signup-phone">Phone Number</label>
@@ -212,13 +325,18 @@ export default function RegisterForm({
             id="modal-signup-phone"
             type="tel"
             value={formData.phone}
-            onChange={(event) =>
-              setFormData((previous) => ({ ...previous, phone: event.target.value }))
-            }
+            onChange={(event) => updateField("phone", event.target.value)}
             placeholder="09XXXXXXXXX"
             autoComplete="tel"
-            required
+            className={fieldErrors.phone ? "input-error" : undefined}
+            aria-invalid={Boolean(fieldErrors.phone)}
+            aria-describedby={fieldErrors.phone ? "modal-signup-phone-error" : undefined}
           />
+          {fieldErrors.phone ? (
+            <p className="field-error" id="modal-signup-phone-error">
+              {fieldErrors.phone}
+            </p>
+          ) : null}
         </div>
         <div className="form-field">
           <label htmlFor="modal-signup-password">Password</label>
@@ -227,11 +345,14 @@ export default function RegisterForm({
               id="modal-signup-password"
               type={showPassword ? "text" : "password"}
               value={formData.password}
-              onChange={(event) =>
-                setFormData((previous) => ({ ...previous, password: event.target.value }))
-              }
+              onChange={(event) => updateField("password", event.target.value)}
               placeholder="Create a password"
               autoComplete="new-password"
+              className={fieldErrors.password ? "input-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={
+                fieldErrors.password ? "modal-signup-password-error" : undefined
+              }
               required
             />
             <button
@@ -243,6 +364,24 @@ export default function RegisterForm({
               <EyeIcon open={showPassword} />
             </button>
           </div>
+          {formData.password ? (
+            <div className={`password-strength ${passwordStrength}`}>
+              <span />
+              <p>
+                Password strength:{" "}
+                {passwordStrength === "strong"
+                  ? "Strong"
+                  : passwordStrength === "good"
+                    ? "Good"
+                    : "Weak"}
+              </p>
+            </div>
+          ) : null}
+          {fieldErrors.password ? (
+            <p className="field-error" id="modal-signup-password-error">
+              {fieldErrors.password}
+            </p>
+          ) : null}
         </div>
         <div className="form-field">
           <label htmlFor="modal-signup-confirm">Confirm Password</label>
@@ -251,14 +390,14 @@ export default function RegisterForm({
               id="modal-signup-confirm"
               type={showConfirmPassword ? "text" : "password"}
               value={formData.confirmPassword}
-              onChange={(event) =>
-                setFormData((previous) => ({
-                  ...previous,
-                  confirmPassword: event.target.value,
-                }))
-              }
+              onChange={(event) => updateField("confirmPassword", event.target.value)}
               placeholder="Confirm your password"
               autoComplete="new-password"
+              className={fieldErrors.confirmPassword ? "input-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.confirmPassword)}
+              aria-describedby={
+                fieldErrors.confirmPassword ? "modal-signup-confirm-error" : undefined
+              }
               required
             />
             <button
@@ -270,6 +409,11 @@ export default function RegisterForm({
               <EyeIcon open={showConfirmPassword} />
             </button>
           </div>
+          {fieldErrors.confirmPassword ? (
+            <p className="field-error" id="modal-signup-confirm-error">
+              {fieldErrors.confirmPassword}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -277,7 +421,14 @@ export default function RegisterForm({
       {success ? <div className="message-banner success">{success}</div> : null}
 
       <button type="submit" className="button-primary auth-submit-button" disabled={isSubmitting}>
-        {isSubmitting ? "Creating Account..." : "Register"}
+        {isSubmitting ? (
+          <>
+            <span className="button-spinner" aria-hidden="true" />
+            Creating account...
+          </>
+        ) : (
+          "Register"
+        )}
       </button>
 
       <div className="auth-switch-line">

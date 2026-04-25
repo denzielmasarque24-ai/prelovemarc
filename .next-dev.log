@@ -6,8 +6,6 @@
 - Local:         http://localhost:3000
 - Network:       http://192.168.137.224:3000
 - Environments: .env.local
-✓ Ready in 401ms
+✓ Ready in 417ms
 Creating turbopack project { dir: 'C:\\Capstone1', testMode: true }
 
- GET /profile 200 in 435ms (next.js: 156ms, application-code: 279ms)
- GET /profile 200 in 151ms (next.js: 15ms, application-code: 136ms)
