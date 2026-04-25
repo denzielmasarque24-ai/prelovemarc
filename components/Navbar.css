@@ -15,21 +15,34 @@
   gap: 1.75rem;
   max-width: 1180px;
   margin: 0 auto;
-  min-height: 86px;
-  padding: 1rem 2rem;
+  min-height: 104px;
+  padding: 0.85rem 2rem;
 }
 
 .navbar-logo {
+  align-items: center;
   flex: 0 0 230px;
   color: #4a3b3f;
+  display: flex;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 1.18rem;
   font-weight: 700;
+  gap: 16px;
   letter-spacing: 0.18em;
   line-height: 1;
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.navbar-logo-image {
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: block;
+  flex: 0 0 auto;
+  height: 78px;
+  object-fit: cover;
+  width: 78px;
 }
 
 .nav-menu {
@@ -292,6 +305,11 @@
   min-height: 42px;
   padding: 0 0.9rem;
   width: 100%;
+}
+
+.profile-menu-link {
+  align-items: center;
+  text-decoration: none;
 }
 
 .profile-menu-action:hover {

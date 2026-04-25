@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import EditProfileModal from "@/components/EditProfileModal";
 import { getProfile } from "@/lib/auth";
 import type { Profile, SessionUser } from "@/lib/types";
@@ -31,7 +32,7 @@ export default function ProfileDropdown({
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  const displayName = profile?.name?.trim() || user.fullName;
+  const displayName = profile?.full_name?.trim() || user.fullName;
   const displayEmail = profile?.email?.trim() || user.email;
   const avatarUrl = profile?.avatar?.trim();
 
@@ -100,6 +101,14 @@ export default function ProfileDropdown({
           >
             Edit Profile
           </button>
+
+          <Link
+            href="/profile"
+            className="profile-menu-action profile-menu-link"
+            onClick={() => setIsOpen(false)}
+          >
+            View Profile
+          </Link>
 
           <button
             type="button"

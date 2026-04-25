@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import ProfileDropdown from '@/components/ProfileDropdown';
@@ -73,7 +74,15 @@ export default function Navbar() {
     <nav className="navbar" aria-label="Primary">
       <div className="navbar-container">
         <Link href="/" className="navbar-logo" aria-label="PRELOVE SHOP home">
-          PRELOVE SHOP
+          <Image
+            src="/images/logo.png"
+            alt=""
+            width={78}
+            height={78}
+            className="navbar-logo-image"
+            priority
+          />
+          <span>PRELOVE SHOP</span>
         </Link>
 
         <ul className="nav-menu">

@@ -17,12 +17,13 @@ export interface SessionUser {
 
 export interface Profile {
   id: string;
-  name: string | null;
-  email: string | null;
-  username: string | null;
-  phone: string | null;
-  avatar: string | null;
-  role: string | null;
+  email?: string | null;
+  full_name?: string | null;
+  username?: string | null;
+  phone?: string | null;
+  avatar?: string | null;
+  address?: string | null;
+  role?: string | null;
   created_at: string | null;
 }
 

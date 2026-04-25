@@ -12,7 +12,7 @@ type ProfilePayload = {
 };
 
 type ProfileRecord = {
-  name: string | null;
+  full_name: string | null;
   email: string | null;
 };
 
@@ -20,16 +20,18 @@ type PendingProfile = ProfilePayload & {
   userId: string;
 };
 
+const profileColumns = "id, full_name, email, username, phone, avatar, address, role, created_at";
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
 
 function getFallbackFullName(email?: string | null) {
   if (!email) {
-    return "Member";
+    return "User";
   }
 
-  return email.split("@")[0]?.trim() || email.trim() || "Member";
+  return email.split("@")[0]?.trim() || email.trim() || "User";
 }
 
 function isMissingAuthSessionError(error: unknown) {
@@ -44,7 +46,7 @@ export async function syncSessionFromUser(userId: string, email?: string | null)
 
   const { data, error } = await supabase
     .from("users")
-    .select("name, email")
+    .select("full_name, email")
     .eq("id", userId)
     .maybeSingle<ProfileRecord>();
 
@@ -55,7 +57,7 @@ export async function syncSessionFromUser(userId: string, email?: string | null)
   }
 
   setSession({
-    fullName: profile?.name?.trim() || getFallbackFullName(email),
+    fullName: profile?.full_name?.trim() || getFallbackFullName(email),
     email: profile?.email?.trim() || email?.trim() || "",
   });
 }
@@ -94,14 +96,6 @@ function clearPendingProfile() {
   window.localStorage.removeItem(PENDING_PROFILE_KEY);
 }
 
-async function getAccessToken() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  return session?.access_token ?? null;
-}
-
 export function rememberPendingProfile(userId: string, profile: ProfilePayload) {
   writePendingProfile({
     userId,
@@ -112,8 +106,13 @@ export function rememberPendingProfile(userId: string, profile: ProfilePayload) 
 export async function saveProfile(userId: string, profile: ProfilePayload) {
   const payload = {
     id: userId,
-    name: profile.fullName?.trim() || null,
-    email: profile.email?.trim() || null,
+    full_name: profile.fullName?.trim() || "User",
+    email: profile.email?.trim() || "",
+    address: "",
+    username: profile.username?.trim() || "",
+    phone: profile.phone?.trim() || "",
+    avatar: "",
+    role: "user",
   };
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -124,7 +123,7 @@ export async function saveProfile(userId: string, profile: ProfilePayload) {
     );
   }
 
-  const { error } = await supabase.from("users").upsert(payload);
+  const { error } = await supabase.from("users").upsert(payload, { onConflict: "id" });
 
   if (error) {
     console.error("Direct user save failed:", error);
@@ -135,15 +134,15 @@ export async function saveProfile(userId: string, profile: ProfilePayload) {
 }
 
 export async function getProfile() {
-  const accessToken = await getAccessToken();
-
-  if (!accessToken) {
-    throw new Error("No active session found.");
-  }
-
   const {
     data: { user },
-  } = await supabase.auth.getUser(accessToken);
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    console.error("Failed to read current Supabase user:", userError);
+    throw new Error(userError.message || "No active session found.");
+  }
 
   if (!user) {
     throw new Error("No authenticated user found.");
@@ -151,11 +150,12 @@ export async function getProfile() {
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, name, email, username, phone, avatar, role, created_at")
+    .select(profileColumns)
     .eq("id", user.id)
-    .maybeSingle<Profile>();
+    .single<Profile>();
 
-  if (error) {
+  if (error && error.code !== "PGRST116") {
+    console.error("Failed to load profile from public.users:", error);
     throw new Error(error.message || "Failed to load profile.");
   }
 
@@ -164,28 +164,32 @@ export async function getProfile() {
   }
 
   const fallbackName =
-    typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
-      ? user.user_metadata.name.trim()
+    typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()
+      ? user.user_metadata.full_name.trim()
+      : typeof user.user_metadata?.name === "string" && user.user_metadata.name.trim()
+        ? user.user_metadata.name.trim()
       : getFallbackFullName(user.email);
 
   const defaultProfile = {
     id: user.id,
-    name: fallbackName,
+    full_name: fallbackName || "User",
     email: user.email ?? "",
+    address: "",
     username:
-      typeof user.user_metadata?.username === "string" ? user.user_metadata.username : null,
-    phone: typeof user.user_metadata?.phone === "string" ? user.user_metadata.phone : null,
-    avatar: null,
+      typeof user.user_metadata?.username === "string" ? user.user_metadata.username : "",
+    phone: typeof user.user_metadata?.phone === "string" ? user.user_metadata.phone : "",
+    avatar: "",
     role: "user",
   };
 
   const { data: createdProfile, error: createError } = await supabase
     .from("users")
     .upsert(defaultProfile, { onConflict: "id" })
-    .select("id, name, email, username, phone, avatar, role, created_at")
+    .select(profileColumns)
     .single<Profile>();
 
   if (createError || !createdProfile) {
+    console.error("Failed to auto-create profile in public.users:", createError);
     throw new Error(createError?.message || "Failed to create profile.");
   }
 
@@ -193,36 +197,44 @@ export async function getProfile() {
 }
 
 export async function updateProfile(profile: {
-  name: string;
+  fullName: string;
   username: string;
   phone: string;
+  address: string;
   avatarUrl: string;
 }) {
-  const accessToken = await getAccessToken();
-
-  if (!accessToken) {
-    throw new Error("No active session found.");
-  }
-
   const {
     data: { user },
-  } = await supabase.auth.getUser(accessToken);
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    console.error("Failed to read current Supabase user:", userError);
+    throw new Error(userError.message || "No active session found.");
+  }
 
   if (!user) {
     throw new Error("No authenticated user found.");
   }
 
-  const payload = {
-    name: profile.name.trim(),
-    username: profile.username.trim() || null,
-    phone: profile.phone.trim() || null,
-    avatar: profile.avatarUrl.trim() || null,
+  const updatePayload = {
+    id: user.id,
+    email: user.email ?? "",
+    full_name: profile.fullName.trim() || "User",
+    username: profile.username.trim(),
+    phone: profile.phone.trim(),
+    address: profile.address.trim(),
+    avatar: profile.avatarUrl.trim(),
+    role: "user",
   };
 
-  const { error } = await supabase.from("users").update(payload).eq("id", user.id);
+  const { error: updateError } = await supabase
+    .from("users")
+    .upsert(updatePayload, { onConflict: "id" });
 
-  if (error) {
-    throw error;
+  if (updateError) {
+    console.error("Failed to upsert profile in public.users:", updateError);
+    throw new Error(updateError.message || "Failed to save profile.");
   }
 
   await syncSessionFromUser(user.id, user.email);

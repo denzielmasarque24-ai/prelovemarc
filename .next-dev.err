@@ -1,13 +1,150 @@
-Error: spawn EPERM
-    at ChildProcess.spawn (node:internal/child_process:421:11)
-    at spawn (node:child_process:796:9)
-    at fork (node:child_process:174:10)
-    at C:\Capstone1\node_modules\next\dist\cli\next-dev.js:253:45
-    at new Promise (<anonymous>)
-    at startServer (C:\Capstone1\node_modules\next\dist\cli\next-dev.js:221:16)
-    at runDevServer (C:\Capstone1\node_modules\next\dist\cli\next-dev.js:355:23)
-    at Module.nextDev (C:\Capstone1\node_modules\next\dist\cli\next-dev.js:363:11) {
-  errno: -4048,
-  code: 'EPERM',
-  syscall: 'spawn'
-}
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load navbar profile: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (components/ProfileDropdown.tsx:44:17)
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load navbar profile: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (components/ProfileDropdown.tsx:44:17)
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfilePage.useEffect.loadProfile (app/profile/page.tsx:53:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load profile page: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfilePage.useEffect.loadProfile (app/profile/page.tsx:53:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (app/profile/page.tsx:55:17)
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load navbar profile: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (components/ProfileDropdown.tsx:44:17)
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load navbar profile: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfileDropdown.useEffect.loadProfile (components/ProfileDropdown.tsx:42:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (components/ProfileDropdown.tsx:44:17)
+[browser] Failed to auto-create profile in public.users: {
+  code: [32m'23505'[39m,
+  details: [32m'Key (email)=(denzielmasarque24@gmail.com) already exists.'[39m,
+  hint: [1mnull[22m,
+  message: [32m'duplicate key value violates unique constraint "users_email_key"'[39m
+} 
+    at getProfile (lib/auth.ts:192:13)
+    at async ProfilePage.useEffect.loadProfile (app/profile/page.tsx:53:20)
+  190 |
+  191 |   if (createError || !createdProfile) {
+> 192 |     console.error("Failed to auto-create profile in public.users:", createError);
+      |             ^
+  193 |     throw new Error(createError?.message || "Failed to create profile.");
+  194 |   }
+  195 | (lib/auth.ts:192:13)
+[browser] Failed to load profile page: Error: duplicate key value violates unique constraint "users_email_key"
+    at getProfile (lib/auth.ts:193:11)
+    at async ProfilePage.useEffect.loadProfile (app/profile/page.tsx:53:20)
+  191 |   if (createError || !createdProfile) {
+  192 |     console.error("Failed to auto-create profile in public.users:", createError);
+> 193 |     throw new Error(createError?.message || "Failed to create profile.");
+      |           ^
+  194 |   }
+  195 |
+  196 |   return createdProfile; (app/profile/page.tsx:55:17)

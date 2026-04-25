@@ -14,8 +14,9 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [address, setAddress] = useState("");
   const [formData, setFormData] = useState({
-    name: "",
+    fullName: "",
     username: "",
     phone: "",
     avatarUrl: "",
@@ -48,14 +49,19 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
         const profile: Profile = await getProfile();
 
         setFormData({
-          name: profile.name ?? "",
+          fullName: profile.full_name ?? "User",
           username: profile.username ?? "",
           phone: profile.phone ?? "",
           avatarUrl: profile.avatar ?? "",
         });
+        setAddress(profile.address || "");
       } catch (profileError) {
         console.error("Failed to load profile:", profileError);
-        setError("We could not load your profile right now.");
+        setError(
+          profileError instanceof Error
+            ? profileError.message
+            : "Failed to load profile.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -69,7 +75,7 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
     setError("");
     setSuccess("");
 
-    if (!formData.name.trim()) {
+    if (!formData.fullName.trim()) {
       setError("Full name is required.");
       return;
     }
@@ -77,13 +83,17 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
     setIsSaving(true);
 
     try {
-      await updateProfile(formData);
+      await updateProfile({ ...formData, address });
       setSuccess("Profile updated.");
       onSaved();
       window.setTimeout(onClose, 600);
     } catch (profileError) {
       console.error("Failed to update profile:", profileError);
-      setError("We could not save your profile. Please try again.");
+      setError(
+        profileError instanceof Error
+          ? profileError.message
+          : "We could not save your profile. Please try again.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -121,9 +131,9 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
               <input
                 id="profile-name"
                 type="text"
-                value={formData.name}
+                value={formData.fullName}
                 onChange={(event) =>
-                  setFormData((current) => ({ ...current, name: event.target.value }))
+                  setFormData((current) => ({ ...current, fullName: event.target.value }))
                 }
                 required
               />
@@ -150,6 +160,17 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
                 onChange={(event) =>
                   setFormData((current) => ({ ...current, phone: event.target.value }))
                 }
+              />
+            </div>
+
+            <div className="profile-field">
+              <label htmlFor="profile-address">Address</label>
+              <input
+                id="profile-address"
+                type="text"
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+                autoComplete="street-address"
               />
             </div>
 
