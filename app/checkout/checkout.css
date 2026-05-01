@@ -150,6 +150,12 @@
   box-shadow: 0 0 0 4px rgba(232, 160, 191, 0.16);
 }
 
+.checkout-fields input::placeholder,
+.checkout-fields textarea::placeholder,
+.gcash-fields input::placeholder {
+  color: #c4a5ae;
+}
+
 .checkout-choice-row {
   display: flex;
   flex-wrap: wrap;
@@ -311,4 +317,295 @@
   .address-fields {
     grid-template-columns: 1fr;
   }
+
+  .gcash-payment-header,
+  .gcash-number-box {
+    grid-template-columns: 1fr;
+  }
+
+  .gcash-payment-header {
+    display: grid;
+  }
+
+  .gcash-steps,
+  .gcash-proof-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gcash-number-box {
+    justify-items: stretch;
+  }
+
+  .gcash-number-box button {
+    width: 100%;
+  }
+}
+
+/* ===== GCASH PAYMENT ===== */
+.gcash-payment-card {
+  background: linear-gradient(180deg, #fffafb 0%, #fff4f7 100%);
+  border: 1px solid rgba(243, 198, 207, 0.92);
+  border-radius: 22px;
+  box-shadow: 0 18px 42px rgba(217, 143, 174, 0.14);
+  display: grid;
+  gap: 1rem;
+  margin: 1rem auto 0;
+  max-width: 760px;
+  padding: 1.25rem;
+}
+
+.gcash-payment-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.gcash-payment-header h3 {
+  color: #4a3b3f;
+  font-size: 1.18rem;
+  margin: 0 0 0.35rem;
+}
+
+.gcash-payment-header p {
+  color: #806a72;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.gcash-badge {
+  background: #ffffff;
+  border: 1px solid rgba(217, 143, 174, 0.32);
+  border-radius: 999px;
+  color: #d98fae;
+  font-size: 0.75rem;
+  font-weight: 900;
+  padding: 0.35rem 0.7rem;
+  white-space: nowrap;
+}
+
+.gcash-number-box {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(243, 198, 207, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgba(146, 83, 108, 0.1);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.9rem;
+}
+
+.gcash-icon {
+  align-items: center;
+  background: linear-gradient(135deg, #e8a0bf, #d98fae);
+  border-radius: 14px;
+  color: #fff;
+  display: flex;
+  font-weight: 900;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.gcash-number-box span {
+  color: #8a737a;
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gcash-number-box strong {
+  color: #4a3b3f;
+  display: block;
+  font-size: 1.18rem;
+  margin-top: 0.15rem;
+}
+
+.gcash-number-box button {
+  background: #fff4f7;
+  border: 1px solid rgba(217, 143, 174, 0.34);
+  border-radius: 999px;
+  color: #c9789d;
+  cursor: pointer;
+  font-weight: 900;
+  min-height: 38px;
+  padding: 0 0.95rem;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.gcash-number-box button:hover {
+  background: #ffeaf0;
+  transform: translateY(-1px);
+}
+
+.gcash-steps {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.gcash-step {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(243, 198, 207, 0.72);
+  border-radius: 16px;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.gcash-step span {
+  align-items: center;
+  background: #f7dbe4;
+  border-radius: 999px;
+  color: #b87090;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.gcash-step p {
+  color: #5d4b51;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.gcash-fields {
+  display: grid;
+  gap: 1rem;
+}
+
+.gcash-fields label {
+  color: #4a3b3f;
+  display: grid;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 0.45rem;
+}
+
+.gcash-fields input {
+  background: #ffffff;
+  border: 1px solid rgba(243, 198, 207, 0.95);
+  border-radius: 16px;
+  color: #4a3b3f;
+  font: inherit;
+  min-height: 48px;
+  outline: none;
+  padding: 0.85rem 0.95rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+}
+
+.gcash-fields input:focus {
+  border-color: #d98fae;
+  box-shadow: 0 0 0 4px rgba(232, 160, 191, 0.18);
+}
+
+.gcash-proof-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.gcash-upload-box {
+  align-content: center;
+  background: #fff;
+  border: 1px dashed rgba(217, 143, 174, 0.72);
+  border-radius: 16px;
+  cursor: pointer;
+  min-height: 96px;
+  padding: 1rem;
+  text-align: center;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.gcash-upload-box:hover {
+  background: #fff7fa;
+  border-color: #d98fae;
+  box-shadow: 0 10px 24px rgba(217, 143, 174, 0.12);
+}
+
+.gcash-upload-box input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.gcash-upload-box span {
+  color: #4a3b3f;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.gcash-upload-box small {
+  color: #9a7d86;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.gcash-proof-preview {
+  background: #fff;
+  border: 1px solid rgba(243, 198, 207, 0.8);
+  border-radius: 18px;
+  overflow: hidden;
+  padding: 0.45rem;
+}
+
+.gcash-proof-preview img {
+  border-radius: 14px;
+  display: block;
+  max-height: 220px;
+  object-fit: cover;
+  width: 100%;
+}
+
+.gcash-success {
+  background: #f0faf4;
+  border: 1px solid #b7dfc5;
+  border-radius: 14px;
+  color: #2d6a4a;
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin: 0;
+  padding: 0.85rem;
+}
+
+.gcash-submit-button {
+  align-items: center;
+  background: linear-gradient(135deg, #e8a0bf 0%, #d98fae 55%, #c9789d 100%);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 14px 28px rgba(217, 143, 174, 0.28);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 1.25rem;
+  transition: box-shadow 0.2s, opacity 0.2s, transform 0.2s;
+  width: 100%;
+}
+
+.gcash-submit-button:hover:not(:disabled) {
+  box-shadow: 0 18px 34px rgba(217, 143, 174, 0.36);
+  transform: translateY(-2px);
+}
+
+.gcash-submit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }

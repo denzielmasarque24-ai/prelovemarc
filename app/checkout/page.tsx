@@ -8,16 +8,10 @@ import { placeCheckoutOrder, type DeliveryOption, type PaymentMethod } from "@/l
 import type { CartItem } from "@/lib/types";
 import "./checkout.css";
 
-const pesoFormatter = new Intl.NumberFormat("en-PH", {
-  style: "currency",
-  currency: "PHP",
-});
-
+const pesoFormatter = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
 const deliveryFee = 5000;
-
-function formatPrice(price: number) {
-  return pesoFormatter.format(price / 100);
-}
+const formatPrice = (price: number) => pesoFormatter.format(price / 100);
+const GCASH_NUMBER = "09XX XXX XXXX";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -31,15 +25,18 @@ export default function CheckoutPage() {
   const [zipCode, setZipCode] = useState("");
   const [notes, setNotes] = useState("");
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>("pickup");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("gcash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [paymentProofUrl, setPaymentProofUrl] = useState("");
+  const [paymentProofPreview, setPaymentProofPreview] = useState("");
+  const [paymentProofName, setPaymentProofName] = useState("");
+  const [paymentFeedback, setPaymentFeedback] = useState("");
+  const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const syncCart = () => {
-      setCartItems(getCart());
-    };
-
+    const syncCart = () => setCartItems(getCart());
     syncCart();
     void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
     window.addEventListener("cart-updated", syncCart);
@@ -57,6 +54,45 @@ export default function CheckoutPage() {
   );
   const selectedDeliveryFee = deliveryOption === "delivery" ? deliveryFee : 0;
   const total = subtotal + selectedDeliveryFee;
+  const needsProof = paymentMethod === "gcash";
+
+  const handleCopyGcash = async () => {
+    try {
+      await navigator.clipboard.writeText(GCASH_NUMBER);
+      setPaymentFeedback("GCash number copied");
+    } catch {
+      setPaymentFeedback("Unable to copy number");
+    }
+  };
+
+  const handleProofUpload = (file?: File) => {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setPaymentProofPreview(result);
+      setPaymentProofUrl(result);
+      setPaymentProofName(file.name);
+      setPaymentFeedback("");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaymentSubmit = async () => {
+    setPaymentFeedback("");
+    setError("");
+
+    if (!referenceNumber.trim()) {
+      setError("Please enter your reference number.");
+      return;
+    }
+
+    setIsPaymentSubmitting(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    setPaymentFeedback("Payment submitted successfully");
+    setIsPaymentSubmitting(false);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -72,21 +108,17 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!paymentMethod) {
-      setError("Please select a payment method.");
+    if (deliveryOption === "delivery" && (!streetAddress.trim() || !barangay.trim() || !city.trim() || !province.trim())) {
+      setError("Please complete your delivery address.");
       return;
     }
 
-    if (
-      deliveryOption === "delivery" &&
-      (!streetAddress.trim() || !barangay.trim() || !city.trim() || !province.trim())
-    ) {
-      setError("Please complete your street address, barangay, city, and province.");
+    if (needsProof && !referenceNumber.trim()) {
+      setError("Please enter your reference number.");
       return;
     }
 
     setIsSubmitting(true);
-
     try {
       const orderId = await placeCheckoutOrder({
         customerName: customerName.trim(),
@@ -101,17 +133,13 @@ export default function CheckoutPage() {
         deliveryOption,
         total,
         items: cartItems,
+        referenceNumber: referenceNumber.trim() || undefined,
+        paymentProof: paymentProofUrl.trim() || undefined,
       });
-
       clearCart();
       router.push(`/checkout/success?order=${orderId}`);
     } catch (caughtError) {
-      console.error("Checkout order failed:", caughtError);
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to place your order. Please try again.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to place your order. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -123,9 +151,7 @@ export default function CheckoutPage() {
         <section className="checkout-empty">
           <h1>Your cart is empty</h1>
           <p>Add a few boutique finds before checking out.</p>
-          <Link href="/shop" className="checkout-primary-link">
-            Continue Shopping
-          </Link>
+          <Link href="/shop" className="checkout-primary-link">Continue Shopping</Link>
         </section>
       </main>
     );
@@ -148,9 +174,7 @@ export default function CheckoutPage() {
                   <img src={item.image} alt={item.name} />
                   <div>
                     <h3>{item.name}</h3>
-                    <p>
-                      {item.quantity} x {formatPrice(item.price)}
-                    </p>
+                    <p>{item.quantity} x {formatPrice(item.price)}</p>
                   </div>
                   <strong>{formatPrice(item.price * item.quantity)}</strong>
                 </article>
@@ -163,33 +187,15 @@ export default function CheckoutPage() {
             <div className="checkout-fields">
               <label>
                 Full Name
-                <input
-                  value={customerName}
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  autoComplete="name"
-                  required
-                />
+                <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} autoComplete="name" required />
               </label>
-
               <label>
                 Phone Number
-                <input
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  autoComplete="tel"
-                  inputMode="tel"
-                  required
-                />
+                <input value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" required />
               </label>
-
               <label>
                 Notes
-                <textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  rows={3}
-                  placeholder="Optional"
-                />
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="Optional" />
               </label>
             </div>
           </section>
@@ -197,79 +203,41 @@ export default function CheckoutPage() {
           <section className="checkout-card">
             <h2>Delivery Option</h2>
             <div className="checkout-choice-row">
-              <label className={deliveryOption === "pickup" ? "checkout-choice active" : "checkout-choice"}>
-                <input
-                  type="radio"
-                  name="deliveryOption"
-                  value="pickup"
-                  checked={deliveryOption === "pickup"}
-                  onChange={() => setDeliveryOption("pickup")}
-                />
-                <span>Pickup</span>
-              </label>
-              <label
-                className={deliveryOption === "delivery" ? "checkout-choice active" : "checkout-choice"}
-              >
-                <input
-                  type="radio"
-                  name="deliveryOption"
-                  value="delivery"
-                  checked={deliveryOption === "delivery"}
-                  onChange={() => setDeliveryOption("delivery")}
-                />
-                <span>Delivery</span>
-              </label>
+              {(["pickup", "delivery"] as DeliveryOption[]).map((option) => (
+                <label key={option} className={deliveryOption === option ? "checkout-choice active" : "checkout-choice"}>
+                  <input
+                    type="radio"
+                    name="deliveryOption"
+                    value={option}
+                    checked={deliveryOption === option}
+                    onChange={() => setDeliveryOption(option)}
+                  />
+                  <span style={{ textTransform: "capitalize" }}>{option}</span>
+                </label>
+              ))}
             </div>
 
             {deliveryOption === "delivery" && (
               <div className="checkout-fields address-fields">
                 <label className="wide-field">
                   Street Address
-                  <input
-                    value={streetAddress}
-                    onChange={(event) => setStreetAddress(event.target.value)}
-                    autoComplete="street-address"
-                    required
-                  />
+                  <input value={streetAddress} onChange={(event) => setStreetAddress(event.target.value)} autoComplete="street-address" required />
                 </label>
-
                 <label>
                   Barangay
-                  <input
-                    value={barangay}
-                    onChange={(event) => setBarangay(event.target.value)}
-                    required
-                  />
+                  <input value={barangay} onChange={(event) => setBarangay(event.target.value)} required />
                 </label>
-
                 <label>
                   City
-                  <input
-                    value={city}
-                    onChange={(event) => setCity(event.target.value)}
-                    autoComplete="address-level2"
-                    required
-                  />
+                  <input value={city} onChange={(event) => setCity(event.target.value)} autoComplete="address-level2" required />
                 </label>
-
                 <label>
                   Province
-                  <input
-                    value={province}
-                    onChange={(event) => setProvince(event.target.value)}
-                    autoComplete="address-level1"
-                    required
-                  />
+                  <input value={province} onChange={(event) => setProvince(event.target.value)} autoComplete="address-level1" required />
                 </label>
-
                 <label>
                   Zip Code
-                  <input
-                    value={zipCode}
-                    onChange={(event) => setZipCode(event.target.value)}
-                    autoComplete="postal-code"
-                    inputMode="numeric"
-                  />
+                  <input value={zipCode} onChange={(event) => setZipCode(event.target.value)} autoComplete="postal-code" inputMode="numeric" />
                 </label>
               </div>
             )}
@@ -278,26 +246,103 @@ export default function CheckoutPage() {
           <section className="checkout-card">
             <h2>Payment Method</h2>
             <div className="checkout-choice-row payment-row">
-              {[
-                ["gcash", "GCash"],
-                ["paymaya", "PayMaya"],
-                ["cod", "Cash on Delivery"],
-              ].map(([value, label]) => (
-                <label
-                  key={value}
-                  className={paymentMethod === value ? "checkout-choice active" : "checkout-choice"}
-                >
+              {([["cod", "Cash on Delivery"], ["gcash", "GCash"]] as [PaymentMethod, string][]).map(([value, label]) => (
+                <label key={value} className={paymentMethod === value ? "checkout-choice active" : "checkout-choice"}>
                   <input
                     type="radio"
                     name="paymentMethod"
                     value={value}
                     checked={paymentMethod === value}
-                    onChange={() => setPaymentMethod(value as PaymentMethod)}
+                    onChange={() => setPaymentMethod(value)}
                   />
                   <span>{label}</span>
                 </label>
               ))}
             </div>
+
+            {paymentMethod === "gcash" && (
+              <div className="gcash-payment-card">
+                <div className="gcash-payment-header">
+                  <div>
+                    <h3>Complete Your Payment</h3>
+                    <p>Send your payment via GCash and enter your transaction details below</p>
+                  </div>
+                  <span className="gcash-badge">GCash</span>
+                </div>
+
+                <div className="gcash-number-box">
+                  <div className="gcash-icon" aria-hidden="true">G</div>
+                  <div>
+                    <span>GCash Number</span>
+                    <strong>{GCASH_NUMBER}</strong>
+                  </div>
+                  <button type="button" onClick={handleCopyGcash}>Copy</button>
+                </div>
+
+                <div className="gcash-steps">
+                  {["Send payment to GCash", "Enter reference number", "Upload proof (optional)"].map((step, index) => (
+                    <div className="gcash-step" key={step}>
+                      <span>{index + 1}</span>
+                      <p>{step}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="gcash-fields">
+                  <label>
+                    Reference Number *
+                    <input
+                      value={referenceNumber}
+                      onChange={(event) => {
+                        setReferenceNumber(event.target.value);
+                        setPaymentFeedback("");
+                      }}
+                      placeholder="Enter your GCash transaction reference"
+                      required={needsProof}
+                    />
+                  </label>
+
+                  <div className="gcash-proof-grid">
+                    <label className="gcash-upload-box">
+                      <input type="file" accept="image/*" onChange={(event) => handleProofUpload(event.target.files?.[0])} />
+                      <span>Upload image proof</span>
+                      <small>{paymentProofName || "PNG, JPG, or screenshot"}</small>
+                    </label>
+
+                    <label>
+                      Or paste proof link
+                      <input
+                        value={paymentProofUrl.startsWith("data:") ? "" : paymentProofUrl}
+                        onChange={(event) => {
+                          setPaymentProofUrl(event.target.value);
+                          setPaymentProofPreview(event.target.value);
+                          setPaymentProofName("");
+                          setPaymentFeedback("");
+                        }}
+                        placeholder="https://example.com/proof.jpg"
+                      />
+                    </label>
+                  </div>
+
+                  {paymentProofPreview && (
+                    <div className="gcash-proof-preview">
+                      <img src={paymentProofPreview} alt="Payment proof preview" />
+                    </div>
+                  )}
+
+                  {paymentFeedback && <p className="gcash-success">{paymentFeedback}</p>}
+
+                  <button
+                    type="button"
+                    className="gcash-submit-button"
+                    onClick={handlePaymentSubmit}
+                    disabled={!referenceNumber.trim() || isPaymentSubmitting}
+                  >
+                    {isPaymentSubmitting ? "Submitting..." : "Submit Payment"}
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <aside className="checkout-card checkout-summary">

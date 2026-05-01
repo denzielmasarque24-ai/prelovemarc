@@ -97,3 +97,37 @@
     font-size: 0.8rem;
   }
 }
+
+/* ===== SHOP SEARCH & FILTER ===== */
+.shop-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.shop-search-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.shop-search-input {
+  background: #fff;
+  border: 1px solid #f3c6cf;
+  border-radius: 999px;
+  color: #4a3b3f;
+  font: inherit;
+  font-size: 0.9rem;
+  min-height: 42px;
+  outline: none;
+  padding: 0 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 220px;
+}
+
+.shop-search-input:focus {
+  border-color: #d98fae;
+  box-shadow: 0 0 0 3px rgba(232, 160, 191, 0.18);
+}

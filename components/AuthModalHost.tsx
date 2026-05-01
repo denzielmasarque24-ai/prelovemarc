@@ -16,7 +16,6 @@ export default function AuthModalHost() {
 
   useEffect(() => {
     const removeModalListener = subscribeToAuthModal((tab) => {
-      console.log("Opening modal:", tab);
       setMode(tab);
       setIsModalOpen(true);
     });
@@ -34,7 +33,6 @@ export default function AuthModalHost() {
     }
 
     const timerId = window.setTimeout(() => {
-      console.log("Opening queued modal:", queuedTab);
       setMode(queuedTab);
       setIsModalOpen(true);
     }, 0);

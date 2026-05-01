@@ -1,53 +1,55 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  rememberPendingProfile,
-  syncSessionFromUser,
-} from "@/lib/auth";
 import { supabase } from "@/lib/supabaseClient";
+import { setSession } from "@/lib/storage";
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const emailConfirmationMessage = "Account created successfully! Please check your email to confirm.";
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ADMIN_EMAIL = "admin@gmail.com";
+const SIGNUP_COOLDOWN_MS = 5000;
 
-type FieldErrors = Partial<Record<keyof RegisterFormState, string>>;
+function mapRegistrationError(message?: string): string {
+  if (!message) return "Sign up failed. Please try again.";
 
-type RegisterFormState = {
-  fullName: string;
-  email: string;
-  username: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-};
+  const m = message.toLowerCase();
 
-function mapRegistrationError(message?: string) {
-  if (!message) {
-    return "Sign up failed. Please try again.";
+  if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email"))) {
+    return "This email is already registered. Please log in instead.";
   }
 
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("user already registered")) {
-    return "This email is already registered. Please log in.";
+  if (m.includes("rate limit") || m.includes("too many requests")) {
+    return "Too many attempts. Please wait before trying again.";
   }
 
-  if (normalized.includes("duplicate key") && normalized.includes("username")) {
-    return "This username is already in use.";
-  }
-
-  if (normalized.includes("duplicate key") && normalized.includes("email")) {
-    return "This email is already registered. Please log in.";
+  if (m.includes("password") && m.includes("weak")) {
+    return "Password is too weak. Use at least 6 characters.";
   }
 
   return message;
 }
 
+function showSignupError(message: string, setError: (message: string) => void) {
+  const mappedMessage = mapRegistrationError(message);
+  setError(mappedMessage);
+  window.alert(mappedMessage);
+}
+
+function logSupabaseAuthError(error: unknown, email: string) {
+  console.error("[RegisterForm] Supabase signUp error:", {
+    email,
+    error,
+    message: error instanceof Error ? error.message : undefined,
+    name: error instanceof Error ? error.name : undefined,
+    status: typeof error === "object" && error !== null && "status" in error ? error.status : undefined,
+    code: typeof error === "object" && error !== null && "code" in error ? error.code : undefined,
+  });
+}
+
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="eye-svg">
         <path d="M2.8 12s3.5-6.2 9.2-6.2 9.2 6.2 9.2 6.2-3.5 6.2-9.2 6.2S2.8 12 2.8 12Z" />
         <circle cx="12" cy="12" r="3" />
       </svg>
@@ -55,7 +57,7 @@ function EyeIcon({ open }: { open: boolean }) {
   }
 
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="eye-svg">
       <path d="m3 4 18 16" />
       <path d="M10.7 6.1c.4-.1.8-.1 1.3-.1 5.7 0 9.2 6 9.2 6s-1.2 2.2-3.4 3.9" />
       <path d="M14.5 14.2a3 3 0 0 1-4-3.6" />
@@ -67,387 +69,290 @@ function EyeIcon({ open }: { open: boolean }) {
 type RegisterFormProps = {
   onClose?: () => void;
   onSwitchToLogin?: () => void;
-  variant?: "modal" | "page";
 };
 
-export default function RegisterForm({
-  onClose,
-  onSwitchToLogin,
-  variant = "modal",
-}: RegisterFormProps) {
+export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormProps) {
   const router = useRouter();
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formData, setFormData] = useState<RegisterFormState>({
-    fullName: "",
-    email: "",
-    username: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-  });
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const isSubmittingRef = useRef(false);
+  const cooldownUntilRef = useRef(0);
+  const cooldownTimerRef = useRef<number | null>(null);
+
   const passwordStrength =
-    formData.password.length >= 10
-      ? "strong"
-      : formData.password.length >= 6
-        ? "good"
-        : formData.password.length > 0
-          ? "weak"
-          : "";
+    password.length >= 10 ? "strong" : password.length >= 6 ? "good" : password.length > 0 ? "weak" : "";
 
-  const validateForm = () => {
-    const errors: FieldErrors = {};
-    const normalizedEmail = formData.email.trim().toLowerCase();
-    const normalizedPassword = formData.password.trim();
-    const normalizedConfirmPassword = formData.confirmPassword.trim();
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) {
+        window.clearInterval(cooldownTimerRef.current);
+      }
+    };
+  }, []);
 
-    if (!formData.fullName.trim()) {
-      errors.fullName = "Full name is required.";
+  const startCooldown = () => {
+    cooldownUntilRef.current = Date.now() + SIGNUP_COOLDOWN_MS;
+    setCooldownSeconds(Math.ceil(SIGNUP_COOLDOWN_MS / 1000));
+
+    if (cooldownTimerRef.current) {
+      window.clearInterval(cooldownTimerRef.current);
     }
 
-    if (!normalizedEmail) {
-      errors.email = "Email is required.";
-    } else if (!emailPattern.test(normalizedEmail)) {
-      errors.email = "Please enter a valid email address.";
-    }
+    cooldownTimerRef.current = window.setInterval(() => {
+      const remainingMs = cooldownUntilRef.current - Date.now();
 
-    if (!normalizedPassword) {
-      errors.password = "Password is required.";
-    } else if (normalizedPassword.length < 6) {
-      errors.password = "Password must be at least 6 characters.";
-    }
+      if (remainingMs <= 0) {
+        setCooldownSeconds(0);
+        cooldownUntilRef.current = 0;
 
-    if (!normalizedConfirmPassword) {
-      errors.confirmPassword = "Please confirm your password.";
-    } else if (normalizedPassword !== normalizedConfirmPassword) {
-      errors.confirmPassword = "Passwords must match.";
-    }
+        if (cooldownTimerRef.current) {
+          window.clearInterval(cooldownTimerRef.current);
+          cooldownTimerRef.current = null;
+        }
 
-    return errors;
-  };
-
-  const updateField = (field: keyof RegisterFormState, value: string) => {
-    setFormData((previous) => ({ ...previous, [field]: value }));
-    setFieldErrors((previous) => {
-      if (!previous[field]) {
-        return previous;
+        return;
       }
 
-      const next = { ...previous };
-      delete next[field];
-      return next;
-    });
+      setCooldownSeconds(Math.ceil(remainingMs / 1000));
+    }, 250);
+  };
+
+  const validate = (normalizedEmail: string) => {
+    if (!fullName.trim()) return "Full name is required.";
+    if (!emailRegex.test(normalizedEmail)) return "Please enter a valid email address.";
+    if (password.trim().length < 6) return "Password must be at least 6 characters.";
+    if (password.trim() !== confirmPassword.trim()) return "Passwords do not match.";
+    return null;
   };
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
-    setSuccess("");
-    setFieldErrors({});
 
-    const { fullName, email, username, phone, password } = formData;
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPassword = password.trim();
-
-    const validationErrors = validateForm();
-
-    if (Object.keys(validationErrors).length) {
-      setFieldErrors(validationErrors);
-      setError("Please fix the highlighted fields.");
+    if (isSubmittingRef.current || isSubmitting) {
       return;
     }
 
+    if (Date.now() < cooldownUntilRef.current) {
+      setError("Please wait before trying again.");
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+    const role = normalizedEmail === ADMIN_EMAIL ? "admin" : "user";
+
+    const validationError = validate(normalizedEmail);
+    if (validationError) {
+      console.warn("[RegisterForm] frontend validation failed:", {
+        email: normalizedEmail,
+        reason: validationError,
+      });
+      setError(validationError);
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: normalizedPassword,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            username: username.trim(),
-            phone: phone.trim(),
-          },
-        },
       });
 
-      if (signUpError || !data.user) {
-        setError(mapRegistrationError(signUpError?.message));
+      if (signUpError) {
+        logSupabaseAuthError(signUpError, normalizedEmail);
+        showSignupError(signUpError.message, setError);
         return;
       }
 
-      const profileDetails = {
-        fullName: fullName.trim(),
-        email: normalizedEmail,
-        username: username.trim(),
-        phone: phone.trim(),
-      };
+      if (!data.user) {
+        showSignupError("Sign up returned no user. Please try again.", setError);
+        return;
+      }
 
-      const { error: upsertError } = await supabase.from("users").upsert(
-        {
+      const { error: profileError } = await supabase.from("profiles").insert({
           id: data.user.id,
-          email: data.user.email ?? normalizedEmail,
           full_name: fullName.trim(),
-          username: username.trim(),
           phone: phone.trim(),
-          role: "user",
-          address: "",
-          avatar: "",
-        },
-        { onConflict: "id" },
-      );
+          role,
+        });
 
-      if (upsertError) {
-        rememberPendingProfile(data.user.id, profileDetails);
-        if (data.session) {
-          setError(mapRegistrationError(upsertError.message));
-          return;
-        }
-      }
-
-      if (data.session) {
-        await syncSessionFromUser(data.user.id, data.user.email);
-      }
-
-      setSuccess(data.session ? "Account created successfully." : emailConfirmationMessage);
-      setFormData({
-        fullName: "",
-        email: "",
-        username: "",
-        phone: "",
-        password: "",
-        confirmPassword: "",
-      });
-
-      if (variant === "page") {
-        router.push("/login");
+      if (profileError) {
+        showSignupError(profileError.message, setError);
         return;
       }
 
-      if (data.session) {
-        if (onSwitchToLogin) {
-          onSwitchToLogin();
-        } else {
-          onClose?.();
-        }
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: normalizedPassword,
+      });
+
+      if (loginError || !loginData.user || !loginData.session) {
+        console.error("[RegisterForm] auto-login error:", loginError);
+        showSignupError(loginError?.message || "Account created, but automatic login failed.", setError);
+        return;
       }
-    } catch (authError) {
-      console.error("Modal sign-up error:", authError);
-      setError(
-        authError instanceof Error
-          ? mapRegistrationError(authError.message)
-          : "We could not finish creating your account. Please try again.",
-      );
+
+      const { data: profile, error: roleError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", loginData.user.id)
+        .single<{ role: "admin" | "user" | null }>();
+
+      if (roleError || !profile) {
+        showSignupError("User profile not found", setError);
+        return;
+      }
+
+      const redirectRole = profile.role ?? "user";
+
+      setSession({
+        fullName: fullName.trim() || loginData.user.email?.split("@")[0] || "User",
+        email: loginData.user.email || normalizedEmail,
+        role: redirectRole,
+      });
+
+      onClose?.();
+      router.push(redirectRole === "admin" ? "/admin" : "/");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[RegisterForm] unexpected error:", msg);
+      showSignupError(msg || "Something went wrong. Please try again.", setError);
     } finally {
+      startCooldown();
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  return (
-    <form className="auth-form auth-modal-form" onSubmit={handleSignUp}>
-      <div className="auth-form-header">
-        <h2>{variant === "page" ? "Create your account" : "Open your account"}</h2>
-        <p>
-          {variant === "page"
-            ? "Set up your boutique profile and start shopping right away."
-            : "Fast setup, elegant details, and no full-page redirect."}
-        </p>
-      </div>
+  const isSubmitDisabled = isSubmitting || cooldownSeconds > 0;
 
-      <div className="form-grid register-grid">
-        <div className="form-field">
-          <label htmlFor="modal-signup-name">Full Name</label>
+  return (
+    <form className="auth-form" onSubmit={handleSignUp} noValidate>
+      <div className="auth-form-grid">
+        <div className="auth-form-field">
+          <label htmlFor="reg-fullname">Full Name</label>
           <input
-            id="modal-signup-name"
+            id="reg-fullname"
             type="text"
-            value={formData.fullName}
-            onChange={(event) => updateField("fullName", event.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
             placeholder="Your full name"
             autoComplete="name"
-            className={fieldErrors.fullName ? "input-error" : undefined}
-            aria-invalid={Boolean(fieldErrors.fullName)}
-            aria-describedby={fieldErrors.fullName ? "modal-signup-name-error" : undefined}
             required
           />
-          {fieldErrors.fullName ? (
-            <p className="field-error" id="modal-signup-name-error">
-              {fieldErrors.fullName}
-            </p>
-          ) : null}
         </div>
-        <div className="form-field">
-          <label htmlFor="modal-signup-email">Email</label>
+
+        <div className="auth-form-field">
+          <label htmlFor="reg-email">Email</label>
           <input
-            id="modal-signup-email"
+            id="reg-email"
             type="email"
-            value={formData.email}
-            onChange={(event) => updateField("email", event.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
-            className={fieldErrors.email ? "input-error" : undefined}
-            aria-invalid={Boolean(fieldErrors.email)}
-            aria-describedby={fieldErrors.email ? "modal-signup-email-error" : undefined}
             required
           />
-          {fieldErrors.email ? (
-            <p className="field-error" id="modal-signup-email-error">
-              {fieldErrors.email}
-            </p>
-          ) : null}
         </div>
-        <div className="form-field">
-          <label htmlFor="modal-signup-username">Username</label>
+
+        <div className="auth-form-field">
+          <label htmlFor="reg-phone">Phone Number</label>
           <input
-            id="modal-signup-username"
-            type="text"
-            value={formData.username}
-            onChange={(event) => updateField("username", event.target.value)}
-            placeholder="yourusername"
-            autoComplete="username"
-            className={fieldErrors.username ? "input-error" : undefined}
-            aria-invalid={Boolean(fieldErrors.username)}
-            aria-describedby={fieldErrors.username ? "modal-signup-username-error" : undefined}
-          />
-          {fieldErrors.username ? (
-            <p className="field-error" id="modal-signup-username-error">
-              {fieldErrors.username}
-            </p>
-          ) : null}
-        </div>
-        <div className="form-field">
-          <label htmlFor="modal-signup-phone">Phone Number</label>
-          <input
-            id="modal-signup-phone"
+            id="reg-phone"
             type="tel"
-            value={formData.phone}
-            onChange={(event) => updateField("phone", event.target.value)}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             placeholder="09XXXXXXXXX"
             autoComplete="tel"
-            className={fieldErrors.phone ? "input-error" : undefined}
-            aria-invalid={Boolean(fieldErrors.phone)}
-            aria-describedby={fieldErrors.phone ? "modal-signup-phone-error" : undefined}
           />
-          {fieldErrors.phone ? (
-            <p className="field-error" id="modal-signup-phone-error">
-              {fieldErrors.phone}
-            </p>
-          ) : null}
         </div>
-        <div className="form-field">
-          <label htmlFor="modal-signup-password">Password</label>
-          <div className="password-field">
+
+        <div className="auth-form-field">
+          <label htmlFor="reg-password">Password</label>
+          <div className="auth-password-wrap">
             <input
-              id="modal-signup-password"
+              id="reg-password"
               type={showPassword ? "text" : "password"}
-              value={formData.password}
-              onChange={(event) => updateField("password", event.target.value)}
-              placeholder="Create a password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 6 characters"
               autoComplete="new-password"
-              className={fieldErrors.password ? "input-error" : undefined}
-              aria-invalid={Boolean(fieldErrors.password)}
-              aria-describedby={
-                fieldErrors.password ? "modal-signup-password-error" : undefined
-              }
               required
             />
             <button
               type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword((previous) => !previous)}
+              className="auth-eye-btn"
+              onClick={() => setShowPassword((p) => !p)}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               <EyeIcon open={showPassword} />
             </button>
           </div>
-          {formData.password ? (
-            <div className={`password-strength ${passwordStrength}`}>
-              <span />
-              <p>
-                Password strength:{" "}
-                {passwordStrength === "strong"
-                  ? "Strong"
-                  : passwordStrength === "good"
-                    ? "Good"
-                    : "Weak"}
-              </p>
+          {passwordStrength && (
+            <div className={`auth-strength auth-strength-${passwordStrength}`}>
+              <span className="auth-strength-bar" />
+              <span className="auth-strength-label">
+                {passwordStrength === "strong" ? "Strong" : passwordStrength === "good" ? "Good" : "Weak"}
+              </span>
             </div>
-          ) : null}
-          {fieldErrors.password ? (
-            <p className="field-error" id="modal-signup-password-error">
-              {fieldErrors.password}
-            </p>
-          ) : null}
+          )}
         </div>
-        <div className="form-field">
-          <label htmlFor="modal-signup-confirm">Confirm Password</label>
-          <div className="password-field">
+
+        <div className="auth-form-field auth-form-grid-full">
+          <label htmlFor="reg-confirm">Confirm Password</label>
+          <div className="auth-password-wrap">
             <input
-              id="modal-signup-confirm"
-              type={showConfirmPassword ? "text" : "password"}
-              value={formData.confirmPassword}
-              onChange={(event) => updateField("confirmPassword", event.target.value)}
-              placeholder="Confirm your password"
+              id="reg-confirm"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat your password"
               autoComplete="new-password"
-              className={fieldErrors.confirmPassword ? "input-error" : undefined}
-              aria-invalid={Boolean(fieldErrors.confirmPassword)}
-              aria-describedby={
-                fieldErrors.confirmPassword ? "modal-signup-confirm-error" : undefined
-              }
               required
             />
             <button
               type="button"
-              className="password-toggle"
-              onClick={() => setShowConfirmPassword((previous) => !previous)}
-              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              className="auth-eye-btn"
+              onClick={() => setShowConfirm((p) => !p)}
+              aria-label={showConfirm ? "Hide password" : "Show password"}
             >
-              <EyeIcon open={showConfirmPassword} />
+              <EyeIcon open={showConfirm} />
             </button>
           </div>
-          {fieldErrors.confirmPassword ? (
-            <p className="field-error" id="modal-signup-confirm-error">
-              {fieldErrors.confirmPassword}
-            </p>
-          ) : null}
         </div>
       </div>
 
-      {error ? <div className="message-banner error">{error}</div> : null}
-      {success ? <div className="message-banner success">{success}</div> : null}
+      {error && <div className="auth-banner auth-banner-error">{error}</div>}
 
-      <button type="submit" className="button-primary auth-submit-button" disabled={isSubmitting}>
+      <button type="submit" className="auth-submit-btn" disabled={isSubmitDisabled}>
         {isSubmitting ? (
           <>
-            <span className="button-spinner" aria-hidden="true" />
-            Creating account...
+            <span className="auth-spinner" aria-hidden="true" /> Creating account...
           </>
+        ) : cooldownSeconds > 0 ? (
+          `Try again in ${cooldownSeconds}s`
         ) : (
-          "Register"
+          "Create Account"
         )}
       </button>
 
-      <div className="auth-switch-line">
-        <span>{success ? "Ready to continue?" : "Already have an account?"}</span>
-        <button
-          type="button"
-          className="auth-inline-link"
-          onClick={() => {
-            if (variant === "page") {
-              router.push("/login");
-              return;
-            }
-
-            onSwitchToLogin?.();
-          }}
-        >
+      <p className="auth-switch">
+        Already have an account?{" "}
+        <button type="button" className="auth-switch-link" onClick={onSwitchToLogin}>
           Log In
         </button>
-      </div>
+      </p>
     </form>
   );
 }

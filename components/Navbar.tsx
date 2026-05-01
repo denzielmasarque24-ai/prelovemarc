@@ -5,8 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import ProfileDropdown from '@/components/ProfileDropdown';
+import AuthModalHost from '@/components/AuthModalHost';
 import { useCart } from '@/context/CartContext';
 import { ensureBrowserSession, signOutUser } from '@/lib/auth';
+import { requestAuthModal } from '@/lib/authModal';
 import { getSession } from '@/lib/storage';
 import type { SessionUser } from '@/lib/types';
 import './Navbar.css';
@@ -16,11 +18,6 @@ const navLinks = [
   { href: '/shop', label: 'Shop' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
-];
-
-const authLinks = [
-  { href: '/login', label: 'Log In', className: 'auth-link auth-link-outline' },
-  { href: '/register', label: 'Register', className: 'auth-link auth-link-filled' },
 ];
 
 function CartIcon() {
@@ -40,16 +37,11 @@ export default function Navbar() {
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
-    const syncSession = () => {
-      setSessionUser(getSession());
-    };
-
+    const syncSession = () => setSessionUser(getSession());
     syncSession();
     void ensureBrowserSession().then(syncSession);
-
     window.addEventListener('session-updated', syncSession);
     window.addEventListener('storage', syncSession);
-
     return () => {
       window.removeEventListener('session-updated', syncSession);
       window.removeEventListener('storage', syncSession);
@@ -66,73 +58,76 @@ export default function Navbar() {
     }
   };
 
-  const handleProfileSaved = () => {
-    setSessionUser(getSession());
-  };
-
   return (
-    <nav className="navbar" aria-label="Primary">
-      <div className="navbar-container">
-        <Link href="/" className="navbar-logo" aria-label="PRELOVE SHOP home">
-          <Image
-            src="/images/logo.png"
-            alt=""
-            width={78}
-            height={78}
-            className="navbar-logo-image"
-            priority
-          />
-          <span>PRELOVE SHOP</span>
-        </Link>
-
-        <ul className="nav-menu">
-          {navLinks.map((link) => {
-            const isActive =
-              link.href === '/' ? pathname === link.href : pathname.startsWith(link.href);
-
-            return (
-              <li key={link.href} className="nav-item">
-                <Link
-                  href={link.href}
-                  className={`nav-link${isActive ? ' active' : ''}`}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  {link.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="navbar-actions">
-          {sessionUser ? (
-            <ProfileDropdown
-              user={sessionUser}
-              onLogout={handleSignOut}
-              onProfileSaved={handleProfileSaved}
+    <>
+      <nav className="navbar" aria-label="Primary">
+        <div className="navbar-container">
+          <Link href="/" className="navbar-logo" aria-label="PRELOVE SHOP home">
+            <Image
+              src="/images/logo.png"
+              alt=""
+              width={78}
+              height={78}
+              className="navbar-logo-image"
+              priority
             />
-          ) : (
-            authLinks.map((link) => {
-              const isActive = pathname === link.href;
-
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`${link.className}${isActive ? ' active' : ''}`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })
-          )}
-
-          <Link href="/cart" className="cart-icon" aria-label="Open cart">
-            <CartIcon />
-            {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+            <span>PRELOVE SHOP</span>
           </Link>
+
+          <ul className="nav-menu">
+            {navLinks.map((link) => {
+              const isActive =
+                link.href === '/' ? pathname === link.href : pathname.startsWith(link.href);
+              return (
+                <li key={link.href} className="nav-item">
+                  <Link
+                    href={link.href}
+                    className={`nav-link${isActive ? ' active' : ''}`}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="navbar-actions">
+            {sessionUser ? (
+              <ProfileDropdown
+                user={sessionUser}
+                onLogout={handleSignOut}
+                onProfileSaved={() => setSessionUser(getSession())}
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="auth-link auth-link-outline"
+                  onClick={() => requestAuthModal('login')}
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  className="auth-link auth-link-filled"
+                  onClick={() => requestAuthModal('register')}
+                >
+                  Register
+                </button>
+              </>
+            )}
+
+            <Link href="/cart" className="cart-icon" aria-label="Open cart">
+              <CartIcon />
+              {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+            </Link>
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Modal host lives here so it's always mounted with the navbar */}
+      <AuthModalHost />
+    </>
   );
 }

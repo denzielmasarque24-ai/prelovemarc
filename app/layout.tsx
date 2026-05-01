@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { CartProvider } from "@/context/CartContext";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import ConditionalShell from "@/components/ConditionalShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,9 +17,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <CartProvider>
-          <Navbar />
-          {children}
-          <Footer />
+          <ConditionalShell>{children}</ConditionalShell>
         </CartProvider>
       </body>
     </html>

@@ -17,7 +17,6 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
   const [address, setAddress] = useState("");
   const [formData, setFormData] = useState({
     fullName: "",
-    username: "",
     phone: "",
     avatarUrl: "",
   });
@@ -50,7 +49,6 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
 
         setFormData({
           fullName: profile.full_name ?? "User",
-          username: profile.username ?? "",
           phone: profile.phone ?? "",
           avatarUrl: profile.avatar ?? "",
         });
@@ -136,18 +134,6 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
                   setFormData((current) => ({ ...current, fullName: event.target.value }))
                 }
                 required
-              />
-            </div>
-
-            <div className="profile-field">
-              <label htmlFor="profile-username">Username</label>
-              <input
-                id="profile-username"
-                type="text"
-                value={formData.username}
-                onChange={(event) =>
-                  setFormData((current) => ({ ...current, username: event.target.value }))
-                }
               />
             </div>
 

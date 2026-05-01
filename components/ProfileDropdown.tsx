@@ -33,7 +33,7 @@ export default function ProfileDropdown({
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const displayName = profile?.full_name?.trim() || user.fullName;
-  const displayEmail = profile?.email?.trim() || user.email;
+  const displayEmail = user.email;
   const avatarUrl = profile?.avatar?.trim();
 
   useEffect(() => {

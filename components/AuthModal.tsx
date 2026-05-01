@@ -1,12 +1,10 @@
 "use client";
 
-import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AuthModalTab } from "@/lib/authModal";
 import LoginForm from "@/components/LoginForm";
 import RegisterForm from "@/components/RegisterForm";
-
-const CLOSE_ANIMATION_MS = 220;
 
 type AuthModalProps = {
   activeTab: AuthModalTab;
@@ -14,124 +12,105 @@ type AuthModalProps = {
   onSwitchTab: (tab: AuthModalTab) => void;
 };
 
-export default function AuthModal({
-  activeTab,
-  onClose,
-  onSwitchTab,
-}: AuthModalProps) {
-  const [isClosing, setIsClosing] = useState(false);
-  const closeTimeoutRef = useRef<number | null>(null);
+export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModalProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const closingRef = useRef(false);
 
+  // Trigger enter animation on mount
   useEffect(() => {
-    document.body.classList.add("modal-open");
-
+    const id = requestAnimationFrame(() => setIsVisible(true));
+    document.body.style.overflow = "hidden";
     return () => {
-      document.body.classList.remove("modal-open");
-      if (closeTimeoutRef.current) {
-        window.clearTimeout(closeTimeoutRef.current);
-      }
+      cancelAnimationFrame(id);
+      document.body.style.overflow = "";
     };
   }, []);
 
-  const handleRequestClose = useCallback(() => {
-    if (isClosing) {
-      return;
-    }
-
-    setIsClosing(true);
-    closeTimeoutRef.current = window.setTimeout(() => {
-      onClose();
-    }, CLOSE_ANIMATION_MS);
-  }, [isClosing, onClose]);
+  const handleClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setIsVisible(false);
+    setTimeout(onClose, 240);
+  }, [onClose]);
 
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        handleRequestClose();
-      }
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleClose]);
 
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [handleRequestClose]);
-
-  const handleSwitchTab = (tab: AuthModalTab) => (event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (isClosing) {
-      setIsClosing(false);
-    }
-    onSwitchTab(tab);
-  };
+  const isLogin = activeTab === "login";
 
   return createPortal(
     <div
-      className={`modal-overlay auth-modal-overlay ${isClosing ? "is-closing" : ""}`}
-      onClick={handleRequestClose}
+      className={`am-overlay${isVisible ? " am-visible" : ""}`}
+      onClick={handleClose}
       role="presentation"
     >
       <div
-        className={`modal-panel auth-card modal-card auth-modal-shell ${isClosing ? "is-closing" : ""}`}
-        onClick={(event) => event.stopPropagation()}
+        className={`am-panel${isVisible ? " am-visible" : ""}`}
+        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="auth-modal-title"
+        aria-label={isLogin ? "Log in to PRELOVE SHOP" : "Create your PRELOVE SHOP account"}
       >
-        <button type="button" className="modal-close auth-modal-close" onClick={handleRequestClose} aria-label="Close authentication modal">
-          <span aria-hidden="true">X</span>
+        {/* Close button */}
+        <button
+          type="button"
+          className="am-close"
+          onClick={handleClose}
+          aria-label="Close"
+        >
+          ✕
         </button>
 
-        <div className="auth-modal-aside">
-          <span className="eyebrow auth-modal-badge">
-            {activeTab === "login" ? "Welcome Back" : "Join Rosette"}
-          </span>
-          <h1 id="auth-modal-title">
-            {activeTab === "login" ? "Step back into your curated closet." : "Create your boutique account."}
-          </h1>
-          <p>
-            {activeTab === "login"
-              ? "Log in without leaving the page and keep browsing your favorites in the background."
-              : "Register in one elegant popup, then continue shopping from exactly where you are."}
+        {/* Header */}
+        <div className="am-header">
+          <span className="am-eyebrow">🌸 PRELOVE SHOP</span>
+          <h2 className="am-title">
+            {isLogin ? "Welcome back" : "Join the boutique"}
+          </h2>
+          <p className="am-subtitle">
+            {isLogin
+              ? "Sign in to your account to continue shopping."
+              : "Create your account and start shopping today."}
           </p>
-
-          <div className="auth-modal-features">
-            <div className="auth-feature-pill">Baby pink access</div>
-            <div className="auth-feature-pill">Protected cart</div>
-            <div className="auth-feature-pill">Quick profile setup</div>
-          </div>
         </div>
 
-        <div className="auth-modal-main">
-          <div className="auth-modal-tabs" role="tablist" aria-label="Authentication tabs">
-            <button
-              type="button"
-              className={`auth-tab-button ${activeTab === "login" ? "active" : ""}`}
-              onClick={handleSwitchTab("login")}
-            >
-              Log In
-            </button>
-            <button
-              type="button"
-              className={`auth-tab-button ${activeTab === "register" ? "active" : ""}`}
-              onClick={handleSwitchTab("register")}
-            >
-              Register
-            </button>
-          </div>
+        {/* Tabs */}
+        <div className="am-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isLogin}
+            className={`am-tab${isLogin ? " am-tab-active" : ""}`}
+            onClick={() => onSwitchTab("login")}
+          >
+            Log In
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isLogin}
+            className={`am-tab${!isLogin ? " am-tab-active" : ""}`}
+            onClick={() => onSwitchTab("register")}
+          >
+            Register
+          </button>
+        </div>
 
-          {activeTab === "login" ? (
+        {/* Form */}
+        <div className="am-body">
+          {isLogin ? (
             <LoginForm
-              key="login-form"
-              onClose={onClose}
+              key="login"
+              onClose={handleClose}
               onSwitchToRegister={() => onSwitchTab("register")}
             />
           ) : (
             <RegisterForm
-              key="register-form"
-              onClose={onClose}
+              key="register"
+              onClose={handleClose}
               onSwitchToLogin={() => onSwitchTab("login")}
             />
           )}
@@ -141,4 +120,3 @@ export default function AuthModal({
     document.body,
   );
 }
-
