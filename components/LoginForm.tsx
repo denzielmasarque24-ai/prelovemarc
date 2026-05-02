@@ -27,11 +27,12 @@ function EyeIcon({ open }: { open: boolean }) {
 type LoginFormProps = {
   onClose?: () => void;
   onSwitchToRegister?: () => void;
+  prefillEmail?: string;
 };
 
-export default function LoginForm({ onClose, onSwitchToRegister }: LoginFormProps) {
+export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail }: LoginFormProps) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefillEmail ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -93,6 +94,11 @@ export default function LoginForm({ onClose, onSwitchToRegister }: LoginFormProp
 
   return (
     <form className="auth-form" onSubmit={handleSignIn} noValidate>
+      {prefillEmail && (
+        <div className="auth-banner auth-banner-info">
+          This email is already registered. Please log in instead.
+        </div>
+      )}
       <div className="auth-form-field">
         <label htmlFor="login-email">Email</label>
         <input

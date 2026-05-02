@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { AuthModalTab } from "@/lib/authModal";
 import LoginForm from "@/components/LoginForm";
 import RegisterForm from "@/components/RegisterForm";
+import OtpForm from "@/components/OtpForm";
+
+type ModalMode = AuthModalTab | "otp";
 
 type AuthModalProps = {
   activeTab: AuthModalTab;
@@ -14,16 +17,21 @@ type AuthModalProps = {
 
 export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModalProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const [mode, setMode] = useState<ModalMode>(activeTab);
+  const [prefillEmail, setPrefillEmail] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
   const closingRef = useRef(false);
 
-  // Trigger enter animation on mount
+  // Sync mode when parent switches tab (but not when we're in otp mode)
+  useEffect(() => {
+    if (mode !== "otp") setMode(activeTab);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const id = requestAnimationFrame(() => setIsVisible(true));
     document.body.style.overflow = "hidden";
-    return () => {
-      cancelAnimationFrame(id);
-      document.body.style.overflow = "";
-    };
+    return () => { cancelAnimationFrame(id); document.body.style.overflow = ""; };
   }, []);
 
   const handleClose = useCallback(() => {
@@ -39,7 +47,22 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
     return () => window.removeEventListener("keydown", onKey);
   }, [handleClose]);
 
-  const isLogin = activeTab === "login";
+  function handleOtpSent(email: string, password: string) {
+    setPendingEmail(email);
+    setPendingPassword(password);
+    setMode("otp");
+  }
+
+  function handleSwitchTab(tab: AuthModalTab) {
+    setMode(tab);
+    onSwitchTab(tab);
+  }
+
+  const isOtp   = mode === "otp";
+  const isLogin = mode === "login";
+
+  const headerTitle    = isOtp ? "Verify your email"          : isLogin ? "Welcome back"          : "Join the boutique";
+  const headerSubtitle = isOtp ? "Enter the 6-digit code sent to your Gmail." : isLogin ? "Sign in to your account to continue shopping." : "Create your account and start shopping today.";
 
   return createPortal(
     <div
@@ -52,66 +75,58 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={isLogin ? "Log in to PRELOVE SHOP" : "Create your PRELOVE SHOP account"}
+        aria-label={headerTitle}
       >
-        {/* Close button */}
-        <button
-          type="button"
-          className="am-close"
-          onClick={handleClose}
-          aria-label="Close"
-        >
-          ✕
-        </button>
+        <button type="button" className="am-close" onClick={handleClose} aria-label="Close">✕</button>
 
-        {/* Header */}
         <div className="am-header">
           <span className="am-eyebrow">🌸 PRELOVE SHOP</span>
-          <h2 className="am-title">
-            {isLogin ? "Welcome back" : "Join the boutique"}
-          </h2>
-          <p className="am-subtitle">
-            {isLogin
-              ? "Sign in to your account to continue shopping."
-              : "Create your account and start shopping today."}
-          </p>
+          <h2 className="am-title">{headerTitle}</h2>
+          <p className="am-subtitle">{headerSubtitle}</p>
         </div>
 
-        {/* Tabs */}
-        <div className="am-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={isLogin}
-            className={`am-tab${isLogin ? " am-tab-active" : ""}`}
-            onClick={() => onSwitchTab("login")}
-          >
-            Log In
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!isLogin}
-            className={`am-tab${!isLogin ? " am-tab-active" : ""}`}
-            onClick={() => onSwitchTab("register")}
-          >
-            Register
-          </button>
-        </div>
+        {/* Hide tabs when showing OTP screen */}
+        {!isOtp && (
+          <div className="am-tabs" role="tablist">
+            <button
+              type="button" role="tab" aria-selected={isLogin}
+              className={`am-tab${isLogin ? " am-tab-active" : ""}`}
+              onClick={() => handleSwitchTab("login")}
+            >
+              Log In
+            </button>
+            <button
+              type="button" role="tab" aria-selected={!isLogin}
+              className={`am-tab${!isLogin ? " am-tab-active" : ""}`}
+              onClick={() => handleSwitchTab("register")}
+            >
+              Register
+            </button>
+          </div>
+        )}
 
-        {/* Form */}
         <div className="am-body">
-          {isLogin ? (
-            <LoginForm
-              key="login"
+          {isOtp ? (
+            <OtpForm
+              pendingEmail={pendingEmail}
+              pendingPassword={pendingPassword}
               onClose={handleClose}
-              onSwitchToRegister={() => onSwitchTab("register")}
+              onBack={() => setMode("register")}
+            />
+          ) : isLogin ? (
+            <LoginForm
+              key={`login-${prefillEmail}`}
+              onClose={handleClose}
+              onSwitchToRegister={() => { setPrefillEmail(""); handleSwitchTab("register"); }}
+              prefillEmail={prefillEmail}
             />
           ) : (
             <RegisterForm
               key="register"
               onClose={handleClose}
-              onSwitchToLogin={() => onSwitchTab("login")}
+              onSwitchToLogin={() => { setPrefillEmail(""); handleSwitchTab("login"); }}
+              onDuplicateEmail={(email) => { setPrefillEmail(email); handleSwitchTab("login"); }}
+              onOtpSent={handleOtpSent}
             />
           )}
         </div>

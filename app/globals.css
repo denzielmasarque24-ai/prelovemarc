@@ -600,6 +600,7 @@ main {
 
 .auth-banner-error   { background: #fff2f4; border: 1px solid #f1bcc8; color: #9b5a6f; }
 .auth-banner-success { background: #f0faf4; border: 1px solid #b7dfc5; color: #2d6a4a; }
+.auth-banner-info    { background: #fff7fb; border: 1px solid #f3c6cf; color: #a0607a; }
 
 /* Submit button */
 .auth-submit-btn {
@@ -666,6 +667,83 @@ main {
 
 /* Prevent body scroll when modal open */
 body.modal-open { overflow: hidden; }
+
+/* ── OTP Form (inside AuthModal) ── */
+.otp-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.otp-hint {
+  color: #7a6a6f;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin: 0;
+  text-align: center;
+}
+
+.otp-hint strong {
+  color: #4a3b3f;
+  word-break: break-all;
+}
+
+.otp-inputs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 0.25rem 0;
+}
+
+.otp-box {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(243, 198, 207, 0.95);
+  border-radius: 12px;
+  color: #4a3b3f;
+  font-size: 1.4rem;
+  font-weight: 700;
+  height: 54px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 46px;
+}
+
+.otp-box:focus {
+  border-color: #d98fae;
+  box-shadow: 0 0 0 3px rgba(232, 160, 191, 0.18);
+}
+
+.otp-box-filled {
+  background: #fff5f8;
+  border-color: #d98fae;
+}
+
+.otp-footer {
+  align-items: center;
+  color: #7a6a6f;
+  display: flex;
+  font-size: 0.82rem;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.otp-cooldown {
+  color: #b09098;
+  font-weight: 600;
+}
+
+.otp-back {
+  background: none;
+  border: none;
+  color: #b09098;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  text-align: center;
+  transition: color 0.2s;
+}
+
+.otp-back:hover { color: #7a6a6f; }
 
 /* ---- Mobile: allow scroll only when viewport is short ---- */
 @media (max-width: 540px) {

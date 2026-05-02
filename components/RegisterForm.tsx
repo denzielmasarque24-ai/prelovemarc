@@ -1,48 +1,22 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ADMIN_EMAIL = "admin@gmail.com";
 const SIGNUP_COOLDOWN_MS = 5000;
 
-function mapRegistrationError(message?: string): string {
+function mapError(message?: string): string {
   if (!message) return "Sign up failed. Please try again.";
-
   const m = message.toLowerCase();
-
-  if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email"))) {
+  if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email")))
     return "This email is already registered. Please log in instead.";
-  }
-
-  if (m.includes("rate limit") || m.includes("too many requests")) {
+  if (m.includes("rate limit") || m.includes("too many requests"))
     return "Too many attempts. Please wait before trying again.";
-  }
-
-  if (m.includes("password") && m.includes("weak")) {
+  if (m.includes("password") && m.includes("weak"))
     return "Password is too weak. Use at least 6 characters.";
-  }
-
   return message;
-}
-
-function showSignupError(message: string, setError: (message: string) => void) {
-  const mappedMessage = mapRegistrationError(message);
-  setError(mappedMessage);
-  window.alert(mappedMessage);
-}
-
-function logSupabaseAuthError(error: unknown, email: string) {
-  console.error("[RegisterForm] Supabase signUp error:", {
-    email,
-    error,
-    message: error instanceof Error ? error.message : undefined,
-    name: error instanceof Error ? error.name : undefined,
-    status: typeof error === "object" && error !== null && "status" in error ? error.status : undefined,
-    code: typeof error === "object" && error !== null && "code" in error ? error.code : undefined,
-  });
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -54,7 +28,6 @@ function EyeIcon({ open }: { open: boolean }) {
       </svg>
     );
   }
-
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="eye-svg">
       <path d="m3 4 18 16" />
@@ -68,10 +41,11 @@ function EyeIcon({ open }: { open: boolean }) {
 type RegisterFormProps = {
   onClose?: () => void;
   onSwitchToLogin?: () => void;
+  onDuplicateEmail?: (email: string) => void;
+  onOtpSent?: (email: string, password: string) => void;
 };
 
-export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormProps) {
-  const router = useRouter();
+export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmail, onOtpSent }: RegisterFormProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -90,37 +64,22 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
     password.length >= 10 ? "strong" : password.length >= 6 ? "good" : password.length > 0 ? "weak" : "";
 
   useEffect(() => {
-    return () => {
-      if (cooldownTimerRef.current) {
-        window.clearInterval(cooldownTimerRef.current);
-      }
-    };
+    return () => { if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current); };
   }, []);
 
   const startCooldown = () => {
     cooldownUntilRef.current = Date.now() + SIGNUP_COOLDOWN_MS;
     setCooldownSeconds(Math.ceil(SIGNUP_COOLDOWN_MS / 1000));
-
-    if (cooldownTimerRef.current) {
-      window.clearInterval(cooldownTimerRef.current);
-    }
-
+    if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current);
     cooldownTimerRef.current = window.setInterval(() => {
-      const remainingMs = cooldownUntilRef.current - Date.now();
-
-      if (remainingMs <= 0) {
+      const remaining = cooldownUntilRef.current - Date.now();
+      if (remaining <= 0) {
         setCooldownSeconds(0);
         cooldownUntilRef.current = 0;
-
-        if (cooldownTimerRef.current) {
-          window.clearInterval(cooldownTimerRef.current);
-          cooldownTimerRef.current = null;
-        }
-
+        if (cooldownTimerRef.current) { window.clearInterval(cooldownTimerRef.current); cooldownTimerRef.current = null; }
         return;
       }
-
-      setCooldownSeconds(Math.ceil(remainingMs / 1000));
+      setCooldownSeconds(Math.ceil(remaining / 1000));
     }, 250);
   };
 
@@ -136,67 +95,69 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
     event.preventDefault();
     setError("");
 
-    if (isSubmittingRef.current || isSubmitting) {
-      return;
-    }
-
-    if (Date.now() < cooldownUntilRef.current) {
-      setError("Please wait before trying again.");
-      return;
-    }
+    if (isSubmittingRef.current || isSubmitting) return;
+    if (Date.now() < cooldownUntilRef.current) { setError("Please wait before trying again."); return; }
 
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
     const role = normalizedEmail === ADMIN_EMAIL ? "admin" : "user";
 
     const validationError = validate(normalizedEmail);
-    if (validationError) {
-      console.warn("[RegisterForm] frontend validation failed:", {
-        email: normalizedEmail,
-        reason: validationError,
-      });
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
+      // Step 1: Create the Supabase auth user
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: normalizedPassword,
       });
 
       if (signUpError) {
-        logSupabaseAuthError(signUpError, normalizedEmail);
-        showSignupError(signUpError.message, setError);
+        const m = signUpError.message.toLowerCase();
+        if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email"))) {
+          onDuplicateEmail?.(normalizedEmail);
+          return;
+        }
+        setError(mapError(signUpError.message));
         return;
       }
 
-      if (!data.user) {
-        showSignupError("Sign up returned no user. Please try again.", setError);
+      if (!data.user) { setError("Sign up returned no user. Please try again."); return; }
+
+      // Step 2: Sign out immediately — prevent auto-login before OTP verified
+      await supabase.auth.signOut();
+
+      // Step 3: Save profile
+      await supabase.from("profiles").upsert(
+        { id: data.user.id, full_name: fullName.trim(), phone: phone.trim(), role },
+        { onConflict: "id" },
+      );
+
+      // Step 4: Send OTP via Gmail API route
+      const otpRes = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+
+      if (!otpRes.ok) {
+        const otpData = await otpRes.json() as { error?: string };
+        setError(otpData.error ?? 'Failed to send verification code. Please try again.');
         return;
       }
 
-      const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          full_name: fullName.trim(),
-          phone: phone.trim(),
-          role,
-        });
-
-      if (profileError) {
-        showSignupError(profileError.message, setError);
-        return;
-      }
-
-      onClose?.();
-      router.push(`/auth/verify?email=${encodeURIComponent(normalizedEmail)}`);
+      // OTP sent — switch modal to OTP screen (do NOT close or navigate)
+      onOtpSent?.(normalizedEmail, normalizedPassword);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[RegisterForm] unexpected error:", msg);
-      showSignupError(msg || "Something went wrong. Please try again.", setError);
+      if (msg.toLowerCase().includes("failed to fetch")) {
+        setError("Cannot reach the server. Check your internet connection or try again later.");
+        return;
+      }
+      setError(msg || "Something went wrong. Please try again.");
     } finally {
       startCooldown();
       isSubmittingRef.current = false;
@@ -211,60 +172,30 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
       <div className="auth-form-grid">
         <div className="auth-form-field">
           <label htmlFor="reg-fullname">Full Name</label>
-          <input
-            id="reg-fullname"
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Your full name"
-            autoComplete="name"
-            required
-          />
+          <input id="reg-fullname" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+            placeholder="Your full name" autoComplete="name" required />
         </div>
 
         <div className="auth-form-field">
           <label htmlFor="reg-email">Email</label>
-          <input
-            id="reg-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-          />
+          <input id="reg-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com" autoComplete="email" required />
         </div>
 
         <div className="auth-form-field">
           <label htmlFor="reg-phone">Phone Number</label>
-          <input
-            id="reg-phone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="09XXXXXXXXX"
-            autoComplete="tel"
-          />
+          <input id="reg-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+            placeholder="09XXXXXXXXX" autoComplete="tel" />
         </div>
 
         <div className="auth-form-field">
           <label htmlFor="reg-password">Password</label>
           <div className="auth-password-wrap">
-            <input
-              id="reg-password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min. 6 characters"
-              autoComplete="new-password"
-              required
-            />
-            <button
-              type="button"
-              className="auth-eye-btn"
-              onClick={() => setShowPassword((p) => !p)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
+            <input id="reg-password" type={showPassword ? "text" : "password"} value={password}
+              onChange={(e) => setPassword(e.target.value)} placeholder="Min. 6 characters"
+              autoComplete="new-password" required />
+            <button type="button" className="auth-eye-btn" onClick={() => setShowPassword((p) => !p)}
+              aria-label={showPassword ? "Hide password" : "Show password"}>
               <EyeIcon open={showPassword} />
             </button>
           </div>
@@ -281,21 +212,11 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
         <div className="auth-form-field auth-form-grid-full">
           <label htmlFor="reg-confirm">Confirm Password</label>
           <div className="auth-password-wrap">
-            <input
-              id="reg-confirm"
-              type={showConfirm ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repeat your password"
-              autoComplete="new-password"
-              required
-            />
-            <button
-              type="button"
-              className="auth-eye-btn"
-              onClick={() => setShowConfirm((p) => !p)}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
-            >
+            <input id="reg-confirm" type={showConfirm ? "text" : "password"} value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat your password"
+              autoComplete="new-password" required />
+            <button type="button" className="auth-eye-btn" onClick={() => setShowConfirm((p) => !p)}
+              aria-label={showConfirm ? "Hide password" : "Show password"}>
               <EyeIcon open={showConfirm} />
             </button>
           </div>
@@ -306,9 +227,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
 
       <button type="submit" className="auth-submit-btn" disabled={isSubmitDisabled}>
         {isSubmitting ? (
-          <>
-            <span className="auth-spinner" aria-hidden="true" /> Creating account...
-          </>
+          <><span className="auth-spinner" aria-hidden="true" /> Creating account...</>
         ) : cooldownSeconds > 0 ? (
           `Try again in ${cooldownSeconds}s`
         ) : (
@@ -318,9 +237,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
 
       <p className="auth-switch">
         Already have an account?{" "}
-        <button type="button" className="auth-switch-link" onClick={onSwitchToLogin}>
-          Log In
-        </button>
+        <button type="button" className="auth-switch-link" onClick={onSwitchToLogin}>Log In</button>
       </p>
     </form>
   );
