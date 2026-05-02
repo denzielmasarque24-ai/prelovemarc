@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COOLDOWN_MS = 60_000;
@@ -14,12 +13,12 @@ type RegisterFormProps = {
 };
 
 export default function RegisterForm({ onSwitchToLogin, onOtpSent }: RegisterFormProps) {
-  const [fullName, setFullName]   = useState("");
-  const [email, setEmail]         = useState("");
-  const [phone, setPhone]         = useState("");
-  const [error, setError]         = useState("");
-  const [sending, setSending]     = useState(false);
-  const [cooldown, setCooldown]   = useState(0);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail]       = useState("");
+  const [phone, setPhone]       = useState("");
+  const [error, setError]       = useState("");
+  const [sending, setSending]   = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const cooldownRef = useRef<number | null>(null);
 
   useEffect(() => () => { if (cooldownRef.current) window.clearInterval(cooldownRef.current); }, []);
@@ -50,29 +49,32 @@ export default function RegisterForm({ onSwitchToLogin, onOtpSent }: RegisterFor
 
     setSending(true);
 
-    // Store profile data — saved after OTP is verified
+    // Store profile data — saved to DB after OTP is verified
     sessionStorage.setItem("pending_full_name", fullName.trim());
     sessionStorage.setItem("pending_phone", phone.trim());
     sessionStorage.setItem("pending_email", normalizedEmail);
 
-    // Send OTP via Gmail — bypasses Supabase email limits
-    const res = await fetch('/api/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: normalizedEmail }),
-    });
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
 
-    setSending(false);
+      const data = await res.json() as { error?: string };
 
-    const resData = await res.json() as { error?: string };
-    if (!res.ok) {
-      console.error('[RegisterForm] send-otp error:', resData.error);
-      setError(resData.error ?? 'Failed to send verification code.');
-      return;
+      if (!res.ok) {
+        setError(data.error ?? "Failed to send verification code. Please try again.");
+        return;
+      }
+
+      startCooldown();
+      onOtpSent?.(normalizedEmail);
+    } catch {
+      setError("Cannot reach the server. Check your internet connection.");
+    } finally {
+      setSending(false);
     }
-
-    startCooldown();
-    onOtpSent?.(normalizedEmail);
   };
 
   return (
@@ -93,7 +95,10 @@ export default function RegisterForm({ onSwitchToLogin, onOtpSent }: RegisterFor
         </div>
 
         <div className="auth-form-field auth-form-grid-full">
-          <label htmlFor="reg-phone">Phone Number <span style={{ fontWeight: 400, color: "#b09098" }}>(optional)</span></label>
+          <label htmlFor="reg-phone">
+            Phone{" "}
+            <span style={{ fontWeight: 400, color: "#b09098" }}>(optional)</span>
+          </label>
           <input id="reg-phone" type="tel" value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="09XXXXXXXXX" autoComplete="tel" />
@@ -114,7 +119,9 @@ export default function RegisterForm({ onSwitchToLogin, onOtpSent }: RegisterFor
 
       <p className="auth-switch">
         Already have an account?{" "}
-        <button type="button" className="auth-switch-link" onClick={onSwitchToLogin}>Log In</button>
+        <button type="button" className="auth-switch-link" onClick={onSwitchToLogin}>
+          Log In
+        </button>
       </p>
     </form>
   );

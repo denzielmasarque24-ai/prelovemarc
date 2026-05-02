@@ -66,32 +66,29 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     setLoading(true); setError(""); setSuccess("");
 
     // Step 1: Verify code against otp_codes table
-    const res = await fetch("/api/verify-otp", {
+    const verifyRes = await fetch("/api/verify-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: pendingEmail, code }),
     });
 
-    const resData = await res.json() as { error?: string };
+    const verifyData = await verifyRes.json() as { error?: string };
 
-    if (!res.ok) {
-      console.error("[OtpForm] verify-otp error:", resData.error);
+    if (!verifyRes.ok) {
       setLoading(false);
-      setError(resData.error ?? "Invalid or expired code. Please try again.");
+      setError(verifyData.error ?? "Invalid or expired code. Please try again.");
       return;
     }
 
-    // Step 2: Create Supabase auth user now that email is verified
+    // Step 2: Create Supabase auth user
     const fullName = sessionStorage.getItem("pending_full_name") ?? "";
     const phone    = sessionStorage.getItem("pending_phone") ?? "";
     const role     = pendingEmail === ADMIN_EMAIL ? "admin" : "user";
-
-    // Use a random password — user will log in via OTP or can set password later
-    const tempPassword = crypto.randomUUID();
+    const tempPass = `OTP-${crypto.randomUUID()}`;
 
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: pendingEmail,
-      password: tempPassword,
+      password: tempPass,
     });
 
     if (signUpError && !signUpError.message.toLowerCase().includes("already registered")) {
@@ -108,14 +105,13 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({ id: userId, full_name: fullName, phone, role }, { onConflict: "id" });
-      if (profileError) console.error("[OtpForm] profile upsert error:", profileError);
+      if (profileError) console.error("[OtpForm] profile error:", profileError);
     }
 
     // Step 4: Clean up
     ["pending_full_name", "pending_phone", "pending_email"].forEach((k) =>
       sessionStorage.removeItem(k)
     );
-
     await supabase.auth.signOut();
 
     setLoading(false);
@@ -126,27 +122,32 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (resendCooldown > 0) return;
     setError(""); setSuccess("");
 
-    const res = await fetch("/api/send-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: pendingEmail }),
-    });
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: pendingEmail }),
+      });
 
-    const resData = await res.json() as { error?: string };
-    if (!res.ok) {
-      setError(resData.error ?? "Could not resend code. Please try again.");
-    } else {
-      setDigits(["", "", "", "", "", ""]);
-      inputRefs.current[0]?.focus();
-      setSuccess("A new verification code has been sent to your Gmail.");
-      startCooldown();
+      const data = await res.json() as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Could not resend code. Please try again.");
+      } else {
+        setDigits(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
+        setSuccess("A new verification code has been sent to your Gmail.");
+        startCooldown();
+      }
+    } catch {
+      setError("Cannot reach the server. Please try again.");
     }
   }
 
   return (
     <div className="otp-form">
       <p className="otp-hint">
-        Enter the 6-digit code sent to your Gmail <strong>{pendingEmail}</strong>
+        Enter the 6-digit code sent to your Gmail{" "}
+        <strong>{pendingEmail}</strong>
       </p>
 
       <div className="otp-inputs" role="group" aria-label="Verification code">
@@ -171,7 +172,9 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       {success && <div className="auth-banner auth-banner-success">{success}</div>}
 
       <button type="button" className="auth-submit-btn" onClick={handleVerify} disabled={loading}>
-        {loading ? <><span className="auth-spinner" aria-hidden="true" /> Verifying…</> : "Verify Code"}
+        {loading
+          ? <><span className="auth-spinner" aria-hidden="true" /> Verifying…</>
+          : "Verify Code"}
       </button>
 
       <div className="otp-footer">
