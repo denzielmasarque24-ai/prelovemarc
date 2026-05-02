@@ -45,7 +45,7 @@ export default function Footer() {
               <span>Phone: +63 917 555 1122</span>
               <div className="social-row">
                 <a
-                  href="https://facebook.com"
+                  href="https://www.facebook.com/suzettemae.robillos"
                   target="_blank"
                   rel="noreferrer"
                   className="social-icon"
@@ -54,7 +54,7 @@ export default function Footer() {
                   <FacebookIcon />
                 </a>
                 <a
-                  href="https://instagram.com"
+                  href="https://www.instagram.com/zemarc.ph/"
                   target="_blank"
                   rel="noreferrer"
                   className="social-icon"
