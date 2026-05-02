@@ -16,17 +16,20 @@ type AuthModalProps = {
 };
 
 export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModalProps) {
-  const [isVisible, setIsVisible]               = useState(false);
-  const [mode, setMode]                         = useState<ModalMode>(activeTab);
-  const [prefillEmail, setPrefillEmail]         = useState("");
-  const [pendingEmail, setPendingEmail]         = useState("");
-  const [loginSuccessMsg, setLoginSuccessMsg]   = useState("");
-  const closingRef = useRef(false);
+  const [isVisible, setIsVisible]             = useState(false);
+  const [mode, setMode]                       = useState<ModalMode>(activeTab);
+  const [prefillEmail, setPrefillEmail]       = useState("");
+  const [pendingEmail, setPendingEmail]       = useState("");
+  const [loginSuccessMsg, setLoginSuccessMsg] = useState("");
+  const closingRef    = useRef(false);
+  const initialised   = useRef(false);
 
-  // Sync mode when parent switches tab (not while in otp mode)
+  // Only sync activeTab on the very first render — never override otp mode
   useEffect(() => {
-    if (mode !== "otp") setMode(activeTab);
-  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!initialised.current) { initialised.current = true; return; }
+    // Parent tab change is only respected when we are NOT in otp mode
+    setMode((prev) => prev === "otp" ? "otp" : activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setIsVisible(true));
@@ -56,12 +59,12 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
   // Called by OtpForm after code is verified — switch to login, do NOT sign in
   function handleVerified(email: string) {
     setPrefillEmail(email);
-    setLoginSuccessMsg("Account created. Please check your Gmail for the verification code before logging in.");
+    setLoginSuccessMsg("Email verified. Please log in now.");
     setMode("login");
-    onSwitchTab("login");
   }
 
   function handleSwitchTab(tab: AuthModalTab) {
+    setPendingEmail("");
     setMode(tab);
     onSwitchTab(tab);
   }
