@@ -6,11 +6,10 @@ import type { ContactMessage } from '@/lib/types';
 import './contact.css';
 
 const contactItems = [
-  { icon: 'Email', label: 'Email', value: 'prelove.shop@gmail.com' },
-  { icon: 'Phone', label: 'Phone', value: '09xx xxx xxxx' },
-  { icon: 'Place', label: 'Location', value: 'Online Shop' },
-  { icon: 'IG', label: 'Instagram', value: '@prelove.shop' },
-  { icon: 'FB', label: 'Facebook', value: 'prelove shop' },
+  { label: 'Email', value: 'prelove.shop@gmail.com' },
+  { label: 'Phone', value: '09xx xxx xxxx' },
+  { label: 'Instagram', value: '@prelove.shop' },
+  { label: 'Facebook', value: 'prelove shop' },
 ];
 
 export default function ContactPage() {
@@ -94,10 +93,12 @@ export default function ContactPage() {
     });
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.email || !form.message) {
-      setError('Please fill in name, email, and message.');
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
+      setError('Please enter your name, email, and message.');
+      setSuccess('');
       return;
     }
 
@@ -106,150 +107,161 @@ export default function ContactPage() {
     setSuccess('');
 
     const submittedEmail = form.email.trim().toLowerCase();
-    const { error: dbError } = await supabase.from('contact_messages').insert({
+    const now = new Date().toISOString();
+    const optimisticMessage: ContactMessage = {
+      id: crypto.randomUUID(),
       name: form.name.trim(),
       email: submittedEmail,
       subject: form.subject.trim() || null,
       message: form.message.trim(),
+      created_at: now,
+    };
+
+    setChatEmail(submittedEmail);
+    setMessages((current) => [...current, optimisticMessage]);
+
+    const { error: dbError } = await supabase.from('contact_messages').insert({
+      name: optimisticMessage.name,
+      email: submittedEmail,
+      subject: optimisticMessage.subject,
+      message: optimisticMessage.message,
     });
 
     setSending(false);
 
     if (dbError) {
+      setMessages((current) => current.filter((message) => message.id !== optimisticMessage.id));
       setError('Failed to send message. Please try again.');
       return;
     }
 
-    setSuccess('Message sent! We will get back to you soon.');
-    setChatEmail(submittedEmail);
+    setSuccess('Message sent.');
+    setForm((current) => ({ ...current, message: '' }));
     await fetchMessages(submittedEmail);
-    setForm({ name: '', email: '', subject: '', message: '' });
   };
 
   return (
     <main className="contact-main">
-      <div className="contact-container">
-        <h1 className="contact-title">CONTACT US</h1>
-
-        <div className="contact-content">
-          <div className="contact-left">
-            <p className="contact-intro">Feel free to message us anytime.</p>
-            <div className="contact-info">
-              {contactItems.map((item) => (
-                <div key={item.label} className="info-item">
-                  <span className="info-icon" aria-hidden="true">{item.icon}</span>
-                  <div className="info-text">
-                    <p className="info-label">{item.label}</p>
-                    <p className="info-value">{item.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      <section className="messenger-shell" aria-label="PRELOVE SHOP contact chat">
+        <aside className="messenger-profile">
+          <div className="shop-avatar-wrap">
+            <img src="/images/logo.png" alt="PRELOVE SHOP logo" className="shop-avatar" />
+            <span className="online-dot" aria-hidden="true" />
           </div>
+          <h1>PRELOVE SHOP</h1>
+          <p className="shop-status">Online</p>
+          <p className="shop-copy">Send us a message and track the reply in this chat.</p>
 
-          <div className="contact-right">
-            <form className="contact-form" onSubmit={handleSubmit}>
-              <h2 className="contact-form-title">Send a Message</h2>
+          <div className="profile-contact-list">
+            {contactItems.map((item) => (
+              <div key={item.label} className="profile-contact-item">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+        </aside>
 
-              {success && <div className="contact-success">{success}</div>}
-              {error && <div className="contact-error">{error}</div>}
+        <section className="messenger-panel">
+          <header className="messenger-header">
+            <div className="mini-avatar">
+              <img src="/images/logo.png" alt="" />
+            </div>
+            <div>
+              <h2>PRELOVE SHOP</h2>
+              <p>Online now</p>
+            </div>
+          </header>
 
-              <div className="contact-field">
-                <label>Name *</label>
+          <form className="messenger-form" onSubmit={handleSubmit}>
+            <div className="chat-identity">
+              <label>
+                Name
                 <input
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
                   placeholder="Your name"
                   required
                 />
-              </div>
-              <div className="contact-field">
-                <label>Email *</label>
+              </label>
+              <label>
+                Email
                 <input
                   type="email"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
                   placeholder="you@example.com"
                   required
                 />
-              </div>
-              <div className="contact-field">
-                <label>Subject</label>
+              </label>
+              <label>
+                Subject
                 <input
                   value={form.subject}
-                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  onChange={(event) => setForm({ ...form, subject: event.target.value })}
                   placeholder="Optional"
                 />
-              </div>
-              <div className="contact-field">
-                <label>Message *</label>
-                <textarea
-                  rows={5}
-                  value={form.message}
-                  onChange={(e) => setForm({ ...form, message: e.target.value })}
-                  placeholder="Write your message here..."
-                  required
-                />
-              </div>
+              </label>
+            </div>
 
-              <button type="submit" className="contact-submit-btn" disabled={sending}>
-                {sending ? 'Sending...' : 'Send Message'}
-              </button>
-            </form>
-
-            <section className="contact-chat" aria-labelledby="contact-chat-title">
-              <div className="contact-chat-header">
-                <div>
-                  <p className="contact-chat-eyebrow">Messenger</p>
-                  <h2 id="contact-chat-title">Your Conversation</h2>
-                </div>
-                {chatEmail ? <span>{chatEmail}</span> : null}
+            {(success || error) && (
+              <div className={error ? 'chat-alert error' : 'chat-alert success'}>
+                {error || success}
               </div>
+            )}
 
-              <div className="contact-chat-body">
-                {!chatEmail ? (
-                  <p className="contact-chat-empty">Enter your email to view your messages.</p>
-                ) : loadingMessages ? (
-                  <p className="contact-chat-empty">Loading conversation...</p>
-                ) : messageError ? (
-                  <p className="contact-chat-empty">{messageError}</p>
-                ) : messages.length ? (
-                  messages.map((message) => (
-                    <div key={message.id} className="chat-thread">
-                      <div className="chat-row chat-row-user">
-                        <div className="chat-meta chat-meta-user">
-                          <span>You</span>
-                          <time>{formatMessageTime(message.created_at)}</time>
-                        </div>
-                        <div className="chat-bubble chat-bubble-user">
-                          {message.subject ? <strong>{message.subject}</strong> : null}
-                          <p>{message.message}</p>
-                        </div>
+            <div className="messenger-body" aria-live="polite">
+              {!chatEmail ? (
+                <p className="chat-empty">Enter your email to load your conversation.</p>
+              ) : loadingMessages ? (
+                <p className="chat-empty">Loading conversation...</p>
+              ) : messageError ? (
+                <p className="chat-empty">{messageError}</p>
+              ) : messages.length ? (
+                messages.map((message) => (
+                  <div key={message.id} className="chat-thread">
+                    <div className="message-row message-row-user">
+                      <div className="message-bubble user-bubble">
+                        <span className="sender-label">You</span>
+                        {message.subject ? <strong>{message.subject}</strong> : null}
+                        <p>{message.message}</p>
                       </div>
-
-                      {message.admin_reply ? (
-                        <div className="chat-row chat-row-admin">
-                          <div className="chat-meta">
-                            <span>Admin</span>
-                            <time>{formatMessageTime(message.replied_at)}</time>
-                          </div>
-                          <div className="chat-bubble chat-bubble-admin">
-                            <p>{message.admin_reply}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="chat-waiting">Admin has not replied yet.</p>
-                      )}
+                      <time>{formatMessageTime(message.created_at)}</time>
                     </div>
-                  ))
-                ) : (
-                  <p className="contact-chat-empty">No messages yet.</p>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
+
+                    {message.admin_reply ? (
+                      <div className="message-row message-row-admin">
+                        <div className="message-bubble admin-bubble">
+                          <span className="sender-label">Admin</span>
+                          <p>{message.admin_reply}</p>
+                        </div>
+                        <time>{formatMessageTime(message.replied_at)}</time>
+                      </div>
+                    ) : (
+                      <p className="waiting-reply">Waiting for admin reply...</p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="chat-empty">No messages yet. Start the conversation below.</p>
+              )}
+            </div>
+
+            <div className="messenger-composer">
+              <textarea
+                rows={1}
+                value={form.message}
+                onChange={(event) => setForm({ ...form, message: event.target.value })}
+                placeholder="Type a message..."
+                required
+              />
+              <button type="submit" disabled={sending} aria-label="Send message">
+                {sending ? '...' : 'Send'}
+              </button>
+            </div>
+          </form>
+        </section>
+      </section>
     </main>
   );
 }
