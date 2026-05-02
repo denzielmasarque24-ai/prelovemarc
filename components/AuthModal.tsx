@@ -16,14 +16,14 @@ type AuthModalProps = {
 };
 
 export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModalProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [mode, setMode] = useState<ModalMode>(activeTab);
-  const [prefillEmail, setPrefillEmail] = useState("");
-  const [pendingEmail, setPendingEmail] = useState("");
-  const [pendingPassword, setPendingPassword] = useState("");
+  const [isVisible, setIsVisible]               = useState(false);
+  const [mode, setMode]                         = useState<ModalMode>(activeTab);
+  const [prefillEmail, setPrefillEmail]         = useState("");
+  const [pendingEmail, setPendingEmail]         = useState("");
+  const [loginSuccessMsg, setLoginSuccessMsg]   = useState("");
   const closingRef = useRef(false);
 
-  // Sync mode when parent switches tab (but not when we're in otp mode)
+  // Sync mode when parent switches tab (not while in otp mode)
   useEffect(() => {
     if (mode !== "otp") setMode(activeTab);
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -47,10 +47,18 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
     return () => window.removeEventListener("keydown", onKey);
   }, [handleClose]);
 
-  function handleOtpSent(email: string, password: string) {
+  // Called by RegisterForm after OTP is sent successfully
+  function handleOtpSent(email: string) {
     setPendingEmail(email);
-    setPendingPassword(password);
     setMode("otp");
+  }
+
+  // Called by OtpForm after code is verified — switch to login, do NOT sign in
+  function handleVerified(email: string) {
+    setPrefillEmail(email);
+    setLoginSuccessMsg("Account created. Please check your Gmail for the verification code before logging in.");
+    setMode("login");
+    onSwitchTab("login");
   }
 
   function handleSwitchTab(tab: AuthModalTab) {
@@ -61,8 +69,17 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
   const isOtp   = mode === "otp";
   const isLogin = mode === "login";
 
-  const headerTitle    = isOtp ? "Verify your email"          : isLogin ? "Welcome back"          : "Join the boutique";
-  const headerSubtitle = isOtp ? "Enter the 6-digit code sent to your Gmail." : isLogin ? "Sign in to your account to continue shopping." : "Create your account and start shopping today.";
+  const headerTitle = isOtp
+    ? "Verify your email"
+    : isLogin
+    ? "Welcome back"
+    : "Join the boutique";
+
+  const headerSubtitle = isOtp
+    ? "Enter the 6-digit code sent to your Gmail."
+    : isLogin
+    ? "Sign in to your account to continue shopping."
+    : "Create your account and start shopping today.";
 
   return createPortal(
     <div
@@ -85,7 +102,7 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
           <p className="am-subtitle">{headerSubtitle}</p>
         </div>
 
-        {/* Hide tabs when showing OTP screen */}
+        {/* Tabs hidden during OTP screen */}
         {!isOtp && (
           <div className="am-tabs" role="tablist">
             <button
@@ -109,16 +126,20 @@ export default function AuthModal({ activeTab, onClose, onSwitchTab }: AuthModal
           {isOtp ? (
             <OtpForm
               pendingEmail={pendingEmail}
-              pendingPassword={pendingPassword}
-              onClose={handleClose}
+              onVerified={handleVerified}
               onBack={() => setMode("register")}
             />
           ) : isLogin ? (
             <LoginForm
               key={`login-${prefillEmail}`}
               onClose={handleClose}
-              onSwitchToRegister={() => { setPrefillEmail(""); handleSwitchTab("register"); }}
+              onSwitchToRegister={() => {
+                setPrefillEmail("");
+                setLoginSuccessMsg("");
+                handleSwitchTab("register");
+              }}
               prefillEmail={prefillEmail}
+              successMessage={loginSuccessMsg}
             />
           ) : (
             <RegisterForm

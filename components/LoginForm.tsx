@@ -28,9 +28,10 @@ type LoginFormProps = {
   onClose?: () => void;
   onSwitchToRegister?: () => void;
   prefillEmail?: string;
+  successMessage?: string;
 };
 
-export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail }: LoginFormProps) {
+export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail, successMessage }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState(prefillEmail ?? "");
   const [password, setPassword] = useState("");
@@ -94,7 +95,10 @@ export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail }:
 
   return (
     <form className="auth-form" onSubmit={handleSignIn} noValidate>
-      {prefillEmail && (
+      {successMessage && (
+        <div className="auth-banner auth-banner-success">{successMessage}</div>
+      )}
+      {!successMessage && prefillEmail && (
         <div className="auth-banner auth-banner-info">
           This email is already registered. Please log in instead.
         </div>

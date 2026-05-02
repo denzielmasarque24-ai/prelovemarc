@@ -42,7 +42,7 @@ type RegisterFormProps = {
   onClose?: () => void;
   onSwitchToLogin?: () => void;
   onDuplicateEmail?: (email: string) => void;
-  onOtpSent?: (email: string, password: string) => void;
+  onOtpSent?: (email: string) => void;
 };
 
 export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmail, onOtpSent }: RegisterFormProps) {
@@ -150,7 +150,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
       }
 
       // OTP sent — switch modal to OTP screen (do NOT close or navigate)
-      onOtpSent?.(normalizedEmail, normalizedPassword);
+      onOtpSent?.(normalizedEmail);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes("failed to fetch")) {

@@ -1,21 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import { setSession } from "@/lib/storage";
 
 const RESEND_COOLDOWN = 60;
 
 type OtpFormProps = {
   pendingEmail: string;
-  pendingPassword: string;
-  onClose: () => void;
+  onVerified: (email: string) => void;
   onBack: () => void;
 };
 
-export default function OtpForm({ pendingEmail, pendingPassword, onClose, onBack }: OtpFormProps) {
-  const router = useRouter();
+export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormProps) {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -89,37 +84,9 @@ export default function OtpForm({ pendingEmail, pendingPassword, onClose, onBack
       return;
     }
 
-    // Code is valid — sign in with password
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: pendingEmail,
-      password: pendingPassword,
-    });
-
-    if (signInError || !signInData.user) {
-      setLoading(false);
-      setSuccess("Email verified! Please log in to continue.");
-      setTimeout(() => { onClose(); router.push("/login"); }, 1500);
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, full_name")
-      .eq("id", signInData.user.id)
-      .single<{ role: string | null; full_name: string | null }>();
-
-    const role = profile?.role ?? "user";
-
-    setSession({
-      fullName: profile?.full_name?.trim() || signInData.user.email?.split("@")[0] || "User",
-      email: signInData.user.email || pendingEmail,
-      role,
-    });
-
+    // Code is valid — notify parent to switch to login tab
     setLoading(false);
-    setSuccess("Email verified! Welcome to PRELOVE SHOP 🌸");
-    setTimeout(() => { onClose(); router.push(role === "admin" ? "/admin" : "/"); }, 1200);
-  }
+    onVerified(pendingEmail);
 
   async function handleResend() {
     if (resendCooldown > 0) return;
