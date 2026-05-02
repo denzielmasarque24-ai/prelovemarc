@@ -59,32 +59,37 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
   }
 
   async function handleVerify() {
-    const token = digits.join("");
-    if (token.length < 6) { setError("Please enter all 6 digits."); return; }
+    const entered = digits.join("");
+    if (entered.length < 6) { setError("Please enter all 6 digits."); return; }
 
     setLoading(true); setError(""); setSuccess("");
 
-    // Verify OTP using Supabase — type "email" matches signInWithOtp
-    const { data, error: verifyError } = await supabase.auth.verifyOtp({
-      email: pendingEmail,
-      token,
-      type: "email",
-    });
+    // Verify against sessionStorage — no database needed
+    const storedCode    = sessionStorage.getItem("pending_otp") ?? "";
+    const storedExpires = Number(sessionStorage.getItem("pending_otp_expires") ?? "0");
 
-    if (verifyError) {
-      console.error("[OtpForm] verifyOtp error:", verifyError);
+    if (!storedCode) {
       setLoading(false);
-      const m = verifyError.message.toLowerCase();
-      if (m.includes("expired") || m.includes("invalid") || m.includes("not found")) {
-        setError("Code expired or invalid. Please click Resend Code.");
-      } else {
-        setError(verifyError.message);
-      }
+      setError("No verification code found. Please click Resend Code.");
       return;
     }
 
-    // Save profile using stored data
-    const userId   = sessionStorage.getItem("pending_user_id") ?? data.user?.id ?? "";
+    if (Date.now() > storedExpires) {
+      sessionStorage.removeItem("pending_otp");
+      sessionStorage.removeItem("pending_otp_expires");
+      setLoading(false);
+      setError("Code expired. Please click Resend Code.");
+      return;
+    }
+
+    if (entered !== storedCode) {
+      setLoading(false);
+      setError("Invalid code. Please check and try again.");
+      return;
+    }
+
+    // Code is correct — save profile
+    const userId   = sessionStorage.getItem("pending_user_id") ?? "";
     const fullName = sessionStorage.getItem("pending_full_name") ?? "";
     const phone    = sessionStorage.getItem("pending_phone") ?? "";
     const role     = sessionStorage.getItem("pending_role") ?? "user";
@@ -96,11 +101,11 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       if (profileError) console.error("[OtpForm] profile error:", profileError);
     }
 
-    // Clean up and sign out OTP session
-    ["pending_full_name", "pending_phone", "pending_role", "pending_user_id"].forEach((k) =>
+    // Clean up all stored data
+    ["pending_otp", "pending_otp_expires", "pending_full_name",
+     "pending_phone", "pending_role", "pending_user_id"].forEach((k) =>
       sessionStorage.removeItem(k)
     );
-    await supabase.auth.signOut();
 
     setLoading(false);
     onVerified(pendingEmail);
@@ -110,19 +115,31 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (resendCooldown > 0) return;
     setError(""); setSuccess("");
 
-    const { error: resendError } = await supabase.auth.signInWithOtp({
-      email: pendingEmail,
-      options: { shouldCreateUser: false },
-    });
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: pendingEmail }),
+      });
 
-    if (resendError) {
-      console.error("[OtpForm] resend error:", resendError);
-      setError(resendError.message);
-    } else {
+      const data = await res.json() as { error?: string; code?: string };
+
+      if (!res.ok) {
+        setError(data.error ?? "Could not resend code. Please try again.");
+        return;
+      }
+
+      if (data.code) {
+        sessionStorage.setItem("pending_otp", data.code);
+        sessionStorage.setItem("pending_otp_expires", String(Date.now() + 10 * 60 * 1000));
+      }
+
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
       setSuccess("A new verification code has been sent to your Gmail.");
       startCooldown();
+    } catch {
+      setError("Cannot reach the server. Please try again.");
     }
   }
 

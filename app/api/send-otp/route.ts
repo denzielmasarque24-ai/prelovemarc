@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       `,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, code: otp });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[send-otp] Error:', message);

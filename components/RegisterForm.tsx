@@ -116,16 +116,23 @@ export default function RegisterForm({ onSwitchToLogin, onDuplicateEmail, onOtpS
       sessionStorage.setItem("pending_role",      role);
       sessionStorage.setItem("pending_user_id",   data.user.id);
 
-      // Step 4: Send OTP via Supabase (uses default email sender)
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: { shouldCreateUser: false },
+      // Step 4: Send OTP via Gmail and store code in sessionStorage
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
-      if (otpError) {
-        console.error('[RegisterForm] signInWithOtp error:', otpError);
-        setError(otpError.message);
+      const resData = await res.json() as { error?: string; code?: string };
+      if (!res.ok) {
+        setError(resData.error ?? "Failed to send verification code.");
         return;
+      }
+
+      // Store the OTP code in sessionStorage for verification
+      if (resData.code) {
+        sessionStorage.setItem("pending_otp", resData.code);
+        sessionStorage.setItem("pending_otp_expires", String(Date.now() + 10 * 60 * 1000));
       }
 
       startCooldown();
