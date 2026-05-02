@@ -87,6 +87,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     // Code is valid — notify parent to switch to login tab
     setLoading(false);
     onVerified(pendingEmail);
+  }
 
   async function handleResend() {
     if (resendCooldown > 0) return;

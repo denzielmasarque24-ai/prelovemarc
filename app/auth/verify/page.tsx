@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { setSession } from '@/lib/storage';
@@ -8,7 +8,7 @@ import styles from './verify.module.css';
 
 const RESEND_COOLDOWN = 60;
 
-export default function VerifyPage() {
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email') ?? '';
@@ -69,25 +69,19 @@ export default function VerifyPage() {
     setError('');
     setSuccess('');
 
-    // Verify OTP using Supabase — type "email" matches signInWithOtp
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'email',
+    const res = await fetch('/api/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code: otp }),
     });
 
-    if (verifyError) {
+    const data = await res.json() as { error?: string };
+
+    if (!res.ok) {
       setLoading(false);
-      const m = verifyError.message.toLowerCase();
-      if (m.includes('expired') || m.includes('invalid'))
-        setError('Invalid or expired code. Please request a new one.');
-      else
-        setError(verifyError.message);
+      setError(data.error ?? 'Invalid or expired code. Please request a new one.');
       return;
     }
-
-    // OTP valid — sign out the OTP session, then sign in with password
-    await supabase.auth.signOut();
 
     const storedEmail    = sessionStorage.getItem('pending_verify_email') ?? email;
     const storedPassword = sessionStorage.getItem('pending_verify_password') ?? '';
@@ -137,15 +131,17 @@ export default function VerifyPage() {
     setError('');
     setSuccess('');
 
-    const { error: resendError } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
+    const res = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
     });
 
-    if (resendError) {
-      setError(resendError.message || 'Could not resend code. Please try again.');
+    const data = await res.json() as { error?: string };
+    if (!res.ok) {
+      setError(data.error ?? 'Could not resend code. Please try again.');
     } else {
-      setSuccess('A new 6-digit code has been sent to your email.');
+      setSuccess('A new 6-digit code has been sent to your Gmail.');
       startResendCooldown();
     }
   }
@@ -201,5 +197,17 @@ export default function VerifyPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d98fae' }}>
+        Loading…
+      </div>
+    }>
+      <VerifyContent />
+    </Suspense>
   );
 }
