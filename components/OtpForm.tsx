@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 const RESEND_COOLDOWN = 60;
-const ADMIN_EMAIL = "admin@gmail.com";
 
 type OtpFormProps = {
   pendingEmail: string;
@@ -80,27 +79,12 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       return;
     }
 
-    // Step 2: Create Supabase auth user
+    // Step 2: Save profile using data stored during registration
     const fullName = sessionStorage.getItem("pending_full_name") ?? "";
     const phone    = sessionStorage.getItem("pending_phone") ?? "";
-    const role     = pendingEmail === ADMIN_EMAIL ? "admin" : "user";
-    const tempPass = `OTP-${crypto.randomUUID()}`;
+    const role     = sessionStorage.getItem("pending_role") ?? "user";
+    const userId   = sessionStorage.getItem("pending_user_id") ?? "";
 
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: pendingEmail,
-      password: tempPass,
-    });
-
-    if (signUpError && !signUpError.message.toLowerCase().includes("already registered")) {
-      console.error("[OtpForm] signUp error:", signUpError);
-      setLoading(false);
-      setError(signUpError.message);
-      return;
-    }
-
-    const userId = signUpData?.user?.id;
-
-    // Step 3: Save profile
     if (userId) {
       const { error: profileError } = await supabase
         .from("profiles")
@@ -108,8 +92,9 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       if (profileError) console.error("[OtpForm] profile error:", profileError);
     }
 
-    // Step 4: Clean up
-    ["pending_full_name", "pending_phone", "pending_email"].forEach((k) =>
+    // Step 3: Clean up
+    ["pending_full_name", "pending_phone", "pending_email",
+     "pending_password", "pending_role", "pending_user_id"].forEach((k) =>
       sessionStorage.removeItem(k)
     );
     await supabase.auth.signOut();
