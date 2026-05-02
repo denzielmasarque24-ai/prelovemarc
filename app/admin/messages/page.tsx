@@ -1,38 +1,110 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminGetMessages, adminMarkMessageRead } from '@/lib/admin';
 import type { ContactMessage } from '@/lib/types';
 
+function formatChatTime(value?: string | null) {
+  if (!value) return '';
+
+  return new Date(value).toLocaleString('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function formatPreviewTime(value?: string | null) {
+  if (!value) return '';
+
+  return new Date(value).toLocaleTimeString('en-PH', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getInitial(name?: string | null) {
+  return (name?.trim()?.[0] || '?').toUpperCase();
+}
+
+function getLatestPreview(message: ContactMessage) {
+  return message.admin_reply?.trim() || message.message || 'No message preview';
+}
+
 export default function AdminMessagesPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
-  const [selected, setSelected] = useState<ContactMessage | null>(null);
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [replyText, setReplyText] = useState('');
   const [replyError, setReplyError] = useState('');
   const [replySuccess, setReplySuccess] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
 
-  const load = () =>
-    adminGetMessages()
-      .then(setMessages)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
+  const filteredMessages = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return messages;
 
-  useEffect(() => { void load(); }, []);
+    return messages.filter((message) => {
+      const haystack = [
+        message.name,
+        message.email,
+        message.subject,
+        message.message,
+        message.admin_reply,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
 
-  const handleOpen = async (msg: ContactMessage) => {
-    setSelected(msg);
-    setReplyText('');
-    setReplyError('');
-    setReplySuccess('');
-    if (!msg.is_read) {
-      await adminMarkMessageRead(msg.id).catch(() => null);
-      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, is_read: true } : m));
+      return haystack.includes(query);
+    });
+  }, [messages, search]);
+
+  const selected = useMemo(
+    () => messages.find((message) => message.id === selectedId) ?? filteredMessages[0] ?? null,
+    [filteredMessages, messages, selectedId],
+  );
+
+  const loadMessages = async () => {
+    try {
+      const data = await adminGetMessages();
+      setMessages(data);
+      setError('');
+
+      if (!selectedId && data[0]) {
+        setSelectedId(data[0].id);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load messages.');
     }
   };
 
-  const handleSendReply = async () => {
+  useEffect(() => {
+    void loadMessages();
+    const interval = window.setInterval(() => {
+      void loadMessages();
+    }, 10000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const handleSelect = async (message: ContactMessage) => {
+    setSelectedId(message.id);
+    setReplyText('');
+    setReplyError('');
+    setReplySuccess('');
+
+    if (!message.is_read) {
+      await adminMarkMessageRead(message.id).catch(() => null);
+      setMessages((prev) =>
+        prev.map((item) => (item.id === message.id ? { ...item, is_read: true } : item)),
+      );
+    }
+  };
+
+  const handleSendReply = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!selected) return;
 
     const adminReply = replyText.trim();
@@ -88,14 +160,11 @@ export default function AdminMessagesPage() {
         replied_by: repliedBy,
       };
 
-      setSelected(updatedMessage);
       setMessages((prev) =>
-        prev.map((message) =>
-          message.id === selected.id ? updatedMessage : message,
-        ),
+        prev.map((message) => (message.id === selected.id ? updatedMessage : message)),
       );
       setReplyText('');
-      setReplySuccess('Reply sent successfully.');
+      setReplySuccess('Reply sent.');
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : 'Failed to send reply.';
       console.error('Failed to send contact message reply:', sendError);
@@ -106,104 +175,118 @@ export default function AdminMessagesPage() {
   };
 
   return (
-    <>
-      <h1 className="admin-page-title">Contact Messages</h1>
-      {error && <div className="admin-error">{error}</div>}
+    <section className="admin-messenger-shell" aria-label="Contact message chats">
+      <aside className="admin-chat-sidebar">
+        <div className="admin-chat-sidebar-head">
+          <h1>Chats</h1>
+          <span>{messages.length}</span>
+        </div>
 
-      <div className="admin-card">
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Subject</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {messages.length ? messages.map((m) => (
-                <tr key={m.id} style={{ fontWeight: m.is_read ? 400 : 700 }}>
-                  <td>{m.name}</td>
-                  <td>{m.email}</td>
-                  <td>{m.subject ?? '(no subject)'}</td>
-                  <td>{m.created_at ? new Date(m.created_at).toLocaleDateString('en-PH') : '—'}</td>
-                  <td>
-                    <span className={`status-badge ${m.status === 'replied' ? 'status-delivered' : m.is_read ? 'status-confirmed' : 'status-pending'}`}>
-                      {m.status === 'replied' ? 'Replied' : m.is_read ? 'Read' : 'Unread'}
+        <input
+          className="admin-chat-search"
+          placeholder="Search messages"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+
+        {error ? <div className="admin-chat-error">{error}</div> : null}
+
+        <div className="admin-chat-list">
+          {filteredMessages.length ? (
+            filteredMessages.map((message) => {
+              const isActive = selected?.id === message.id;
+              const preview = getLatestPreview(message);
+              const time = formatPreviewTime(message.replied_at || message.created_at);
+
+              return (
+                <button
+                  key={message.id}
+                  type="button"
+                  className={`admin-chat-item${isActive ? ' active' : ''}`}
+                  onClick={() => void handleSelect(message)}
+                >
+                  <span className="admin-chat-avatar">{getInitial(message.name)}</span>
+                  <span className="admin-chat-summary">
+                    <span className="admin-chat-name-row">
+                      <strong>{message.name}</strong>
+                      <time>{time}</time>
                     </span>
-                  </td>
-                  <td>
-                    <button type="button" className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => handleOpen(m)}>
-                      View
-                    </button>
-                  </td>
-                </tr>
-              )) : (
-                <tr><td colSpan={6} className="admin-empty">No messages yet.</td></tr>
-              )}
-            </tbody>
-          </table>
+                    <span className="admin-chat-preview">{preview}</span>
+                  </span>
+                  {!message.is_read ? <span className="admin-unread-dot" aria-label="Unread message" /> : null}
+                </button>
+              );
+            })
+          ) : (
+            <p className="admin-chat-empty">No messages found.</p>
+          )}
         </div>
-      </div>
+      </aside>
 
-      {selected && (
-        <div className="admin-modal-overlay">
-          <div className="admin-modal">
-            <button type="button" className="admin-modal-close" onClick={() => setSelected(null)}>✕</button>
-            <h2>Message from {selected.name}</h2>
-            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              <p><strong>Email:</strong> {selected.email}</p>
-              {selected.subject && <p><strong>Subject:</strong> {selected.subject}</p>}
-              <p><strong>Date:</strong> {selected.created_at ? new Date(selected.created_at).toLocaleString('en-PH') : '—'}</p>
-            </div>
-            <div style={{ background: '#fdf0f3', borderRadius: 12, padding: '1rem', fontSize: '0.92rem', lineHeight: 1.7 }}>
-              {selected.message}
-            </div>
-            {selected.admin_reply ? (
-              <div style={{ background: '#fffafc', border: '1px solid #f3c6cf', borderRadius: 12, marginTop: '1rem', padding: '1rem', fontSize: '0.92rem', lineHeight: 1.7 }}>
-                <strong style={{ color: '#4a3b3f', display: 'block', marginBottom: '0.35rem' }}>Latest Reply</strong>
-                <p>{selected.admin_reply}</p>
-                {selected.replied_at ? (
-                  <small style={{ color: '#7a6a6f', display: 'block', marginTop: '0.5rem' }}>
-                    Sent {new Date(selected.replied_at).toLocaleString('en-PH')}
-                  </small>
-                ) : null}
+      <section className="admin-chat-panel">
+        {selected ? (
+          <>
+            <header className="admin-chat-header">
+              <span className="admin-chat-avatar large">{getInitial(selected.name)}</span>
+              <div>
+                <h2>{selected.name}</h2>
+                <p>{selected.email}</p>
               </div>
-            ) : null}
-            <div className="admin-field" style={{ marginTop: '1rem' }}>
-              <label htmlFor="contact-reply">Reply</label>
-              <textarea
-                id="contact-reply"
-                rows={5}
-                placeholder="Type your reply..."
-                value={replyText}
-                onChange={(event) => setReplyText(event.target.value)}
-                disabled={isSendingReply}
-              />
-            </div>
-            {replyError ? <div className="admin-error" style={{ marginTop: '1rem', marginBottom: 0 }}>{replyError}</div> : null}
-            {replySuccess ? (
-              <div className="admin-settings-alert success" style={{ marginTop: '1rem', marginBottom: 0 }}>
-                {replySuccess}
+            </header>
+
+            <div className="admin-chat-body">
+              <div className="admin-chat-date">{formatChatTime(selected.created_at)}</div>
+
+              <div className="admin-message-row customer">
+                <div className="admin-message-bubble customer">
+                  <span>{selected.name}</span>
+                  {selected.subject ? <strong>{selected.subject}</strong> : null}
+                  <p>{selected.message}</p>
+                </div>
+                <time>{formatChatTime(selected.created_at)}</time>
               </div>
-            ) : null}
-            <div className="admin-modal-actions">
-              <button type="button" className="admin-btn admin-btn-outline" onClick={() => setSelected(null)}>Close</button>
-              <button
-                type="button"
-                className="admin-btn admin-btn-primary"
-                onClick={handleSendReply}
-                disabled={isSendingReply}
-              >
-                {isSendingReply ? 'Sending...' : 'Send Reply'}
-              </button>
+
+              {selected.admin_reply ? (
+                <div className="admin-message-row shop">
+                  <div className="admin-message-bubble shop">
+                    <span>PRELOVE SHOP</span>
+                    <p>{selected.admin_reply}</p>
+                  </div>
+                  <time>{formatChatTime(selected.replied_at)}</time>
+                </div>
+              ) : (
+                <p className="admin-waiting-reply">Waiting for admin reply...</p>
+              )}
             </div>
+
+            <form className="admin-chat-composer" onSubmit={handleSendReply}>
+              {replyError ? <div className="admin-chat-error composer-alert">{replyError}</div> : null}
+              {replySuccess ? <div className="admin-chat-success composer-alert">{replySuccess}</div> : null}
+              <div className="admin-chat-input-row">
+                <textarea
+                  rows={1}
+                  placeholder="Write a reply..."
+                  value={replyText}
+                  onChange={(event) => {
+                    setReplyText(event.target.value);
+                    setReplyError('');
+                    setReplySuccess('');
+                  }}
+                  disabled={isSendingReply}
+                />
+                <button type="submit" disabled={isSendingReply}>
+                  {isSendingReply ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <div className="admin-chat-placeholder">
+            <h2>Select a conversation</h2>
+            <p>Choose a customer message from the Chats list.</p>
           </div>
-        </div>
-      )}
-    </>
+        )}
+      </section>
+    </section>
   );
 }

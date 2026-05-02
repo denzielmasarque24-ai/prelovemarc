@@ -10,7 +10,8 @@ import "./checkout.css";
 import { formatPrice } from "@/lib/format";
 
 const deliveryFee = 50;
-const GCASH_NUMBER = "09XX XXX XXXX";
+const gcashNumber = "PUT_REAL_GCASH_NUMBER_HERE";
+const gcashQr = "/images/gcash-qr.png";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function CheckoutPage() {
 
   const handleCopyGcash = async () => {
     try {
-      await navigator.clipboard.writeText(GCASH_NUMBER);
+      await navigator.clipboard.writeText(gcashNumber);
       setPaymentFeedback("GCash number copied");
     } catch {
       setPaymentFeedback("Unable to copy number");
@@ -269,13 +270,20 @@ export default function CheckoutPage() {
                   <span className="gcash-badge">GCash</span>
                 </div>
 
-                <div className="gcash-number-box">
-                  <div className="gcash-icon" aria-hidden="true">G</div>
-                  <div>
-                    <span>GCash Number</span>
-                    <strong>{GCASH_NUMBER}</strong>
+                <div className="gcash-payment-main">
+                  <div className="gcash-number-box">
+                    <div className="gcash-icon" aria-hidden="true">G</div>
+                    <div>
+                      <span>GCash Number</span>
+                      <strong>{gcashNumber}</strong>
+                    </div>
+                    <button type="button" onClick={handleCopyGcash}>Copy</button>
                   </div>
-                  <button type="button" onClick={handleCopyGcash}>Copy</button>
+
+                  <div className="gcash-qr-box">
+                    <span>Scan QR Code to Pay</span>
+                    <img src={gcashQr} alt="GCash QR code for PRELOVE SHOP payment" />
+                  </div>
                 </div>
 
                 <div className="gcash-steps">
