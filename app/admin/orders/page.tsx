@@ -2,19 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { adminGetAllOrders, adminUpdateOrderStatus } from '@/lib/admin';
+import { getOrderStatusClass, getOrderStatusLabel, normalizeOrderStatus, orderStatuses } from '@/lib/orderStatus';
+import { formatPrice } from '@/lib/format';
 import type { Order, OrderStatus } from '@/lib/types';
-
-const statuses: OrderStatus[] = [
-  'pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled',
-];
-
-const pesoFormatter = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-const formatPrice = (v: number) => pesoFormatter.format(v / 100);
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDelivery, setFilterDelivery] = useState('all');
   const [selected, setSelected] = useState<Order | null>(null);
   const [error, setError] = useState('');
 
@@ -38,8 +34,9 @@ export default function AdminOrdersPage() {
   const filtered = orders.filter((o) => {
     const matchSearch = o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
       o.id.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'all' || o.status === filterStatus;
-    return matchSearch && matchStatus;
+    const matchStatus = filterStatus === 'all' || normalizeOrderStatus(o.status) === filterStatus;
+    const matchDelivery = filterDelivery === 'all' || (o.delivery_option ?? 'pickup') === filterDelivery;
+    return matchSearch && matchStatus && matchDelivery;
   });
 
   return (
@@ -61,7 +58,17 @@ export default function AdminOrdersPage() {
           onChange={(e) => setFilterStatus(e.target.value)}
         >
           <option value="all">All Statuses</option>
-          {statuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          {orderStatuses.map((s) => <option key={s} value={s}>{getOrderStatusLabel(s)}</option>)}
+        </select>
+        <select
+          className="admin-search"
+          style={{ width: 'auto' }}
+          value={filterDelivery}
+          onChange={(e) => setFilterDelivery(e.target.value)}
+        >
+          <option value="all">All Delivery</option>
+          <option value="pickup">Pickup</option>
+          <option value="delivery">Delivery</option>
         </select>
       </div>
 
@@ -87,10 +94,12 @@ export default function AdminOrdersPage() {
                   <td>{o.customer_name}</td>
                   <td>{formatPrice(o.total)}</td>
                   <td style={{ textTransform: 'capitalize' }}>{o.payment_method.replace(/_/g, ' ')}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{o.delivery_option}</td>
+                  <td style={{ textTransform: 'capitalize' }}>
+                    {o.delivery_option ?? 'pickup'}
+                  </td>
                   <td>
-                    <span className={`status-badge status-${o.status}`}>
-                      {o.status.replace(/_/g, ' ')}
+                    <span className={`status-badge ${getOrderStatusClass(o.status)}`}>
+                      {getOrderStatusLabel(o.status)}
                     </span>
                   </td>
                   <td>{o.created_at ? new Date(o.created_at).toLocaleDateString('en-PH') : '—'}</td>
@@ -126,7 +135,7 @@ export default function AdminOrdersPage() {
                   <a href={selected.payment_proof} target="_blank" rel="noreferrer" style={{ color: '#d98fae' }}>View</a>
                 </p>
               )}
-              <p><strong>Delivery:</strong> {selected.delivery_option}</p>
+              <p><strong>Delivery:</strong> <span style={{ textTransform: 'capitalize' }}>{selected.delivery_option ?? 'pickup'}</span></p>
               {selected.notes && <p><strong>Notes:</strong> {selected.notes}</p>}
               <p><strong>Total:</strong> {formatPrice(selected.total)}</p>
             </div>
@@ -153,11 +162,11 @@ export default function AdminOrdersPage() {
             <div className="admin-field">
               <label>Update Status</label>
               <select
-                value={selected.status}
+                value={normalizeOrderStatus(selected.status)}
                 onChange={(e) => handleStatusChange(selected.id, e.target.value as OrderStatus)}
               >
-                {statuses.map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                {orderStatuses.map((s) => (
+                  <option key={s} value={s}>{getOrderStatusLabel(s)}</option>
                 ))}
               </select>
             </div>

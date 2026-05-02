@@ -1,22 +1,23 @@
 "use client";
 
 import { supabase } from "@/lib/supabaseClient";
+import { normalizeOrderStatus } from "@/lib/orderStatus";
 import type { ContactMessage, Order, OrderStatus, Product, Profile } from "@/lib/types";
 
 type ProductRow = Record<string, unknown>;
 
 const fallbackProductImage = "/images/logo.png";
-const validCategories: Product["category"][] = ["Tops", "Bottoms", "Dresses"];
+const validCategories: Product["category"][] = ["tops", "bottoms", "dresses"];
 
 function readString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function normalizeProduct(row: ProductRow): Product {
-  const rawCategory = readString(row.category, "Tops");
+  const rawCategory = readString(row.category, "tops").toLowerCase();
   const category = validCategories.includes(rawCategory as Product["category"])
     ? (rawCategory as Product["category"])
-    : "Tops";
+    : "tops";
 
   const rawPrice = typeof row.price === "number" ? row.price : Number(row.price);
   const rawStock = typeof row.stock === "number" ? row.stock : Number(row.stock);
@@ -47,7 +48,10 @@ export async function adminGetAllOrders(): Promise<Order[]> {
 }
 
 export async function adminUpdateOrderStatus(orderId: string, status: OrderStatus) {
-  const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: normalizeOrderStatus(status) })
+    .eq("id", orderId);
   if (error) throw new Error(error.message);
 }
 
@@ -118,23 +122,27 @@ export async function adminMarkMessageRead(messageId: string) {
 
 export async function adminGetDashboardStats() {
   const [ordersRes, usersRes, productsRes, messagesRes] = await Promise.all([
-    supabase.from("orders").select("id, total, status, created_at"),
+    supabase.from("orders").select("id, total, status, created_at").order("created_at", { ascending: false }),
     supabase.from("profiles").select("id"),
     supabase.from("products").select("id"),
     supabase.from("contact_messages").select("id, is_read"),
   ]);
 
   const orders = (ordersRes.data ?? []) as { id: string; total: number; status: string; created_at: string }[];
+  const messages = (messagesRes.data ?? []) as { id: string; is_read: boolean }[];
+
+  // Revenue = sum of completed orders (consistent with Reports page)
   const totalRevenue = orders
-    .filter((o) => o.status === "delivered")
+    .filter((o) => normalizeOrderStatus(o.status) === "completed")
     .reduce((sum, o) => sum + o.total, 0);
 
   return {
     totalOrders: orders.length,
+    totalPayments: orders.length, // one payment per order
     totalRevenue,
     totalUsers: (usersRes.data ?? []).length,
     totalProducts: (productsRes.data ?? []).length,
-    unreadMessages: (messagesRes.data ?? []).filter((m: { is_read: boolean }) => !m.is_read).length,
+    unreadMessages: messages.filter((m) => !m.is_read).length,
     recentOrders: orders.slice(0, 5),
   };
 }

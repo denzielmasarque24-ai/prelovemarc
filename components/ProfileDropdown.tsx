@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import EditProfileModal from "@/components/EditProfileModal";
 import { getProfile } from "@/lib/auth";
+import { requestAuthModal } from "@/lib/authModal";
+import { clearSession } from "@/lib/storage";
+import { logSupabaseError, supabase } from "@/lib/supabase";
 import type { Profile, SessionUser } from "@/lib/types";
 
 type ProfileDropdownProps = {
@@ -22,6 +25,14 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+const defaultAvatar = "/default-avatar.png";
+
+function getSafeAvatarUrl(value?: string | null) {
+  const avatar = value?.trim();
+  if (!avatar || avatar.includes("via.placeholder.com")) return defaultAvatar;
+  return avatar;
+}
+
 export default function ProfileDropdown({
   user,
   onLogout,
@@ -30,16 +41,34 @@ export default function ProfileDropdown({
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [hasActiveSession, setHasActiveSession] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const displayName = profile?.full_name?.trim() || user.fullName;
   const displayEmail = user.email;
-  const avatarUrl = profile?.avatar?.trim();
+  const avatarUrl = getSafeAvatarUrl(profile?.avatar);
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        setProfile(await getProfile());
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error || !session?.user) {
+          if (error) {
+            logSupabaseError("ProfileDropdown auth session", error);
+          }
+          clearSession();
+          setHasActiveSession(false);
+          setProfile(null);
+          return;
+        }
+
+        setHasActiveSession(true);
+        const loadedProfile = await getProfile();
+        setProfile(loadedProfile);
       } catch (error) {
         console.error("Failed to load navbar profile:", error);
       }
@@ -62,10 +91,49 @@ export default function ProfileDropdown({
 
   const handleProfileSaved = () => {
     onProfileSaved();
-    void getProfile().then(setProfile).catch((error) => {
-      console.error("Failed to refresh navbar profile:", error);
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session }, error }) => {
+        if (error || !session?.user) {
+          if (error) {
+            logSupabaseError("ProfileDropdown refresh auth session", error);
+          }
+          clearSession();
+          setHasActiveSession(false);
+          setProfile(null);
+          return null;
+        }
+
+        setHasActiveSession(true);
+        return getProfile().then((loadedProfile) => {
+          setProfile(loadedProfile);
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to refresh navbar profile:", error);
+      });
   };
+
+  if (!hasActiveSession) {
+    return (
+      <>
+        <button
+          type="button"
+          className="auth-link auth-link-outline"
+          onClick={() => requestAuthModal("login")}
+        >
+          Log In
+        </button>
+        <button
+          type="button"
+          className="auth-link auth-link-filled"
+          onClick={() => requestAuthModal("register")}
+        >
+          Register
+        </button>
+      </>
+    );
+  }
 
   return (
     <div className="profile-menu" ref={dropdownRef}>
@@ -76,11 +144,13 @@ export default function ProfileDropdown({
         aria-label="Open profile menu"
         aria-expanded={isOpen}
       >
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={displayName} />
-        ) : (
-          <span>{getInitials(displayName || displayEmail)}</span>
-        )}
+        <img
+          src={avatarUrl}
+          alt={displayName || getInitials(displayEmail)}
+          onError={(event) => {
+            event.currentTarget.src = defaultAvatar;
+          }}
+        />
       </button>
 
       {isOpen ? (

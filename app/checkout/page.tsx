@@ -7,10 +7,9 @@ import { clearCart, getCart, hydrateCartFromSupabase } from "@/lib/storage";
 import { placeCheckoutOrder, type DeliveryOption, type PaymentMethod } from "@/lib/orders";
 import type { CartItem } from "@/lib/types";
 import "./checkout.css";
+import { formatPrice } from "@/lib/format";
 
-const pesoFormatter = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
-const deliveryFee = 5000;
-const formatPrice = (price: number) => pesoFormatter.format(price / 100);
+const deliveryFee = 50;
 const GCASH_NUMBER = "09XX XXX XXXX";
 
 export default function CheckoutPage() {

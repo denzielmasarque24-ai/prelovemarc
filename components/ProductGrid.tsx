@@ -1,14 +1,17 @@
 'use client';
 
 import ProductCard from './ProductCard';
-import { addToCart } from '@/lib/storage';
+import { useCart } from '@/context/CartContext';
 import { Product } from '@/lib/types';
+import './ProductGrid.css';
 
 type ProductGridProps = {
   products: Product[];
 };
 
 export default function ProductGrid({ products }: ProductGridProps) {
+  const { addToCart } = useCart();
+
   return (
     <div className="product-grid">
       {products.map((product) => (

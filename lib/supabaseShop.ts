@@ -1,10 +1,23 @@
 import { supabase } from "@/lib/supabaseClient";
-import { products as fallbackProducts } from "@/lib/products";
 import type { Product } from "@/lib/types";
 
 type ProductRow = Record<string, unknown>;
 
-const validCategories: Product["category"][] = ["Tops", "Bottoms", "Dresses"];
+const validCategories: Product["category"][] = ["tops", "bottoms", "dresses"];
+
+function normalizeCategory(value: unknown): Product["category"] | null {
+  if (typeof value !== "string") return null;
+
+  const category = value.trim().toLowerCase();
+  return validCategories.includes(category as Product["category"])
+    ? (category as Product["category"])
+    : null;
+}
+
+function isActiveProduct(row: ProductRow) {
+  const status = typeof row.status === "string" ? row.status.trim().toLowerCase() : "active";
+  return status === "active";
+}
 
 function normalizeProductRow(row: ProductRow) {
   const rawId = row.id;
@@ -15,44 +28,30 @@ function normalizeProductRow(row: ProductRow) {
         ? rawId.trim()
         : null;
 
-  if (id === null) {
-    return null;
-  }
+  if (id === null) return null;
 
-  const fallbackProduct = fallbackProducts.find((product) => String(product.id) === String(id));
-  const rawCategory = typeof row.category === "string" ? row.category : fallbackProduct?.category;
-  const category = validCategories.includes(rawCategory as Product["category"])
-    ? (rawCategory as Product["category"])
-    : fallbackProduct?.category;
-
-  if (!category) {
-    return null;
-  }
+  const category = normalizeCategory(row.category);
+  if (!category) return null;
 
   const image =
-    (typeof row.image === "string" && row.image) ||
-    (typeof row.image_url === "string" && row.image_url) ||
-    fallbackProduct?.image;
+    (typeof row.image === "string" && row.image.trim()) ||
+    (typeof row.image_url === "string" && row.image_url.trim());
 
-  const name =
-    (typeof row.name === "string" && row.name) ||
-    fallbackProduct?.name;
+  const name = typeof row.name === "string" && row.name.trim() ? row.name.trim() : null;
 
   const description =
-    (typeof row.description === "string" && row.description) ||
-    fallbackProduct?.description ||
-    "";
+    typeof row.description === "string" && row.description.trim()
+      ? row.description.trim()
+      : "";
 
   const priceValue =
     typeof row.price === "number"
       ? row.price
       : typeof row.price === "string"
         ? Number(row.price)
-        : fallbackProduct?.price;
+        : null;
 
-  if (!name || !image || !Number.isFinite(priceValue ?? NaN)) {
-    return null;
-  }
+  if (!name || !image || !Number.isFinite(priceValue ?? NaN)) return null;
 
   return {
     id,
@@ -68,10 +67,10 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
   const { data, error } = await supabase
     .from("products")
     .select("*")
-    .order("id", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (error) {
-    console.warn("Failed to load products from Supabase, using local fallback:", {
+    console.error("Failed to load products from Supabase:", {
       message: error.message,
       details: error.details,
       hint: error.hint,
@@ -80,18 +79,12 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
     return null;
   }
 
-  const normalizedProducts = ((data as ProductRow[] | null) ?? []).reduce<Product[]>(
-    (accumulator, row) => {
-      const product = normalizeProductRow(row);
+  return ((data as ProductRow[] | null) ?? []).reduce<Product[]>((accumulator, row) => {
+    if (!isActiveProduct(row)) return accumulator;
 
-      if (product) {
-        accumulator.push(product);
-      }
+    const product = normalizeProductRow(row);
+    if (product) accumulator.push(product);
 
-      return accumulator;
-    },
-    [],
-  );
-
-  return normalizedProducts;
+    return accumulator;
+  }, []);
 }

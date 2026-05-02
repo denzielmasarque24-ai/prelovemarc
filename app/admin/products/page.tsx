@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { adminDeleteProduct, adminGetAllProducts, adminUpsertProduct } from '@/lib/admin';
+import { formatPrice } from '@/lib/format';
 import type { Product, ProductCategory } from '@/lib/types';
 
-const categories: ProductCategory[] = ['Tops', 'Bottoms', 'Dresses'];
-const pesoFormatter = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-const formatPrice = (v: number) => pesoFormatter.format(v / 100);
+const categories: ProductCategory[] = ['tops', 'bottoms', 'dresses'];
 const fallbackProductImage = '/images/logo.png';
 
 const emptyForm = {
   name: '',
   price: '',
   image: '',
-  category: 'Tops' as ProductCategory,
+  category: 'tops' as ProductCategory,
   description: '',
   size: '',
   color: '',
@@ -182,8 +181,8 @@ export default function AdminProductsPage() {
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div className="admin-field">
-                  <label>Price (in centavos) *</label>
-                  <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="e.g. 99900 = ₱999" />
+                  <label>Price (₱) *</label>
+                  <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="e.g. 299" />
                 </div>
                 <div className="admin-field">
                   <label>Category</label>

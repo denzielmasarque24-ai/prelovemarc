@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { getProfile, updateProfile } from "@/lib/auth";
-import type { Profile } from "@/lib/types";
 
 type EditProfileModalProps = {
   onClose: () => void;
@@ -45,7 +44,12 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const profile: Profile = await getProfile();
+        const profile = await getProfile();
+
+        if (!profile) {
+          setError("Please log in to edit your profile.");
+          return;
+        }
 
         setFormData({
           fullName: profile.full_name ?? "User",

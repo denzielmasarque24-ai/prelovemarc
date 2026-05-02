@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { adminGetAllOrders } from '@/lib/admin';
+import { getOrderStatusClass, getOrderStatusLabel, normalizeOrderStatus } from '@/lib/orderStatus';
+import { formatPrice } from '@/lib/format';
 import type { Order } from '@/lib/types';
-
-const pesoFormatter = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-const formatPrice = (v: number) => pesoFormatter.format(v / 100);
 
 export default function AdminReportsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -17,10 +16,10 @@ export default function AdminReportsPage() {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
 
-  const delivered = orders.filter((o) => o.status === 'delivered');
-  const totalRevenue = delivered.reduce((s, o) => s + o.total, 0);
-  const pending = orders.filter((o) => o.status === 'pending').length;
-  const cancelled = orders.filter((o) => o.status === 'cancelled').length;
+  const completed = orders.filter((o) => normalizeOrderStatus(o.status) === 'completed');
+  const totalRevenue = completed.reduce((s, o) => s + o.total, 0);
+  const pending = orders.filter((o) => normalizeOrderStatus(o.status) === 'pending').length;
+  const cancelled = orders.filter((o) => normalizeOrderStatus(o.status) === 'cancelled').length;
 
   const byPayment = orders.reduce<Record<string, number>>((acc, o) => {
     acc[o.payment_method] = (acc[o.payment_method] ?? 0) + 1;
@@ -38,8 +37,8 @@ export default function AdminReportsPage() {
           <p className="admin-stat-value pink">{orders.length}</p>
         </div>
         <div className="admin-stat-card">
-          <p className="admin-stat-label">Delivered</p>
-          <p className="admin-stat-value">{delivered.length}</p>
+          <p className="admin-stat-label">Completed</p>
+          <p className="admin-stat-value">{completed.length}</p>
         </div>
         <div className="admin-stat-card">
           <p className="admin-stat-label">Pending</p>
@@ -94,7 +93,11 @@ export default function AdminReportsPage() {
                   <td style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{o.id.slice(0, 8)}…</td>
                   <td>{o.customer_name}</td>
                   <td>{formatPrice(o.total)}</td>
-                  <td><span className={`status-badge status-${o.status}`}>{o.status.replace(/_/g, ' ')}</span></td>
+                  <td>
+                    <span className={`status-badge ${getOrderStatusClass(o.status)}`}>
+                      {getOrderStatusLabel(o.status)}
+                    </span>
+                  </td>
                   <td>{o.created_at ? new Date(o.created_at).toLocaleDateString('en-PH') : '—'}</td>
                 </tr>
               )) : (

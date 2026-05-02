@@ -6,7 +6,7 @@ export const products: Product[] = [
     name: "Soft Blush Shorts",
     price: 1299,
     image: "/images/short1.png",
-    category: "Bottoms",
+    category: "bottoms",
     description: "Soft boutique shorts with a flattering fit and an easy feminine feel.",
   },
   {
@@ -14,7 +14,7 @@ export const products: Product[] = [
     name: "Twist Front Tube Top",
     price: 999,
     image: "/images/twist-front-tube-top.png",
-    category: "Tops",
+    category: "tops",
     description:
       "Twist Front Tube Top\n\n• brand: SHEIN\n• size: xs-small\n• condition: 10/10\n• worn once\n\nMine: 130\n(Grab at your own price 🫰)",
   },
@@ -23,7 +23,7 @@ export const products: Product[] = [
     name: "Blue Top",
     price: 1499,
     image: "/images/blue-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A polished blue top made for feminine everyday outfits.",
   },
   {
@@ -31,7 +31,7 @@ export const products: Product[] = [
     name: "Self-tie Top",
     price: 1699,
     image: "/images/self-tie-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A feminine self-tie top with a soft boutique silhouette.",
   },
   {
@@ -39,7 +39,7 @@ export const products: Product[] = [
     name: "One Shoulder Rib-Knot Top",
     price: 2199,
     image: "/images/one-shoulder-rib-knot-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A one shoulder rib-knot top with a sleek feminine fit.",
   },
   {
@@ -47,7 +47,7 @@ export const products: Product[] = [
     name: "One Drawstring Ruched Top",
     price: 2399,
     image: "/images/one-drawstring-ruched-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A ruched drawstring top with a soft feminine silhouette.",
   },
   {
@@ -55,7 +55,7 @@ export const products: Product[] = [
     name: "Lace Top",
     price: 1199,
     image: "/images/lace-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A delicate lace top with a soft boutique finish.",
   },
   {
@@ -63,7 +63,7 @@ export const products: Product[] = [
     name: "Fendi Highwaist Shorts",
     price: 1399,
     image: "/images/fendi-highwaist-shorts.png",
-    category: "Bottoms",
+    category: "bottoms",
     description: "Highwaist shorts with a polished boutique-inspired fit.",
   },
   {
@@ -71,7 +71,7 @@ export const products: Product[] = [
     name: "Lightwash Highwaist Shorts",
     price: 1599,
     image: "/images/lightwash-highwaist-shorts.png",
-    category: "Bottoms",
+    category: "bottoms",
     description: "Lightwash highwaist shorts with an easy everyday fit.",
   },
   {
@@ -79,7 +79,15 @@ export const products: Product[] = [
     name: "Shoulder Hem Tank Top",
     price: 1299,
     image: "/images/shoulder-hem-tank-top.png",
-    category: "Tops",
+    category: "tops",
     description: "A shoulder hem tank top with a clean boutique look.",
+  },
+  {
+    id: 11,
+    name: "Blue Patterned Longsleeve",
+    price: 249,
+    image: "/images/blue-patterned-longsleeve.png",
+    category: "tops",
+    description: "Stylish blue patterned longsleeve perfect for casual wear.",
   },
 ];

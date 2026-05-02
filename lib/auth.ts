@@ -1,5 +1,5 @@
 import { Profile } from "@/lib/types";
-import { supabase } from "@/lib/supabaseClient";
+import { isSupabaseConfigured, logSupabaseError, supabase } from "@/lib/supabase";
 import { clearSession, setSession } from "@/lib/storage";
 
 const profileColumns = "id, full_name, phone, avatar, address, role, created_at";
@@ -27,21 +27,30 @@ function isMissingAuthSessionError(error: unknown) {
 }
 
 export async function syncSessionFromUser(userId: string, email?: string | null) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("full_name, role")
-    .eq("id", userId)
-    .maybeSingle<ProfileRow>();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", userId)
+      .maybeSingle<ProfileRow>();
 
-  if (error) {
-    console.error("syncSessionFromUser failed:", error);
+    if (error) {
+      logSupabaseError("syncSessionFromUser profiles select", error);
+    }
+
+    setSession({
+      fullName: data?.full_name?.trim() || getFallbackFullName(email),
+      email: email?.trim() || "",
+      role: data?.role ?? "user",
+    });
+  } catch (error) {
+    console.error("Unexpected error in syncSessionFromUser:", error);
+    setSession({
+      fullName: getFallbackFullName(email),
+      email: email?.trim() || "",
+      role: "user",
+    });
   }
-
-  setSession({
-    fullName: data?.full_name?.trim() || getFallbackFullName(email),
-    email: email?.trim() || "",
-    role: data?.role ?? "user",
-  });
 }
 
 export async function upsertProfile(payload: {
@@ -52,45 +61,69 @@ export async function upsertProfile(payload: {
   avatar?: string;
   role?: string;
 }) {
-  const { error } = await supabase.from("profiles").upsert(
-    {
-      id: payload.id,
-      full_name: payload.fullName || "User",
-      phone: payload.phone ?? "",
-      address: payload.address ?? "",
-      avatar: payload.avatar ?? "",
-      role: payload.role ?? "user",
-    },
-    { onConflict: "id" },
-  );
+  try {
+    const { error } = await supabase.from("profiles").upsert(
+      {
+        id: payload.id,
+        full_name: payload.fullName || "User",
+        phone: payload.phone ?? "",
+        address: payload.address ?? "",
+        avatar: payload.avatar ?? "",
+        role: payload.role ?? "user",
+      },
+      { onConflict: "id" },
+    );
 
-  if (error) {
-    console.error("upsertProfile failed:", error.message, error.details, error.hint, error.code);
-    throw new Error(error.message);
+    if (error) {
+      logSupabaseError("upsertProfile profiles upsert", error);
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    console.error("Unexpected error in upsertProfile:", error);
+    throw error;
   }
 }
 
-export async function getProfile(): Promise<Profile> {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error(userError?.message || "No authenticated user found.");
+export async function getProfile(): Promise<Profile | null> {
+  if (!isSupabaseConfigured) {
+    return null;
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(profileColumns)
-    .eq("id", user.id)
-    .single<Profile>();
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-  if (error || !data) {
-    throw new Error(error?.message || "User profile not found.");
+    if (sessionError) {
+      if (!isMissingAuthSessionError(sessionError)) {
+        logSupabaseError("getProfile auth session", sessionError);
+      }
+
+      return null;
+    }
+
+    if (!session?.user) {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(profileColumns)
+      .eq("id", session.user.id)
+      .maybeSingle<Profile>();
+
+    if (error) {
+      logSupabaseError("getProfile profiles select", error);
+      return null;
+    }
+
+    return data ?? null;
+  } catch (error) {
+    console.error("Unexpected error in getProfile:", error);
+
+    return null;
   }
-
-  return data;
 }
 
 export async function updateProfile(profile: {
@@ -134,27 +167,38 @@ export async function updateProfile(profile: {
 }
 
 export async function ensureBrowserSession() {
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error) {
-    if (isMissingAuthSessionError(error)) {
-      clearSession();
-      return false;
-    }
-    console.error("Failed to read Supabase auth session:", error);
-    return false;
-  }
-
-  if (!session?.user) {
+  if (!isSupabaseConfigured) {
     clearSession();
     return false;
   }
 
-  await syncSessionFromUser(session.user.id, session.user.email);
-  return true;
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      if (isMissingAuthSessionError(error)) {
+        clearSession();
+        return false;
+      }
+      logSupabaseError("ensureBrowserSession auth session", error);
+      return false;
+    }
+
+    if (!session?.user) {
+      clearSession();
+      return false;
+    }
+
+    await syncSessionFromUser(session.user.id, session.user.email);
+    return true;
+  } catch (error) {
+    console.error("Unexpected error in ensureBrowserSession:", error);
+    clearSession();
+    return false;
+  }
 }
 
 export async function signOutUser() {

@@ -1,11 +1,9 @@
-export type ProductCategory = "Tops" | "Bottoms" | "Dresses";
+export type ProductCategory = "tops" | "bottoms" | "dresses";
 export type ProductId = number | string;
 export type OrderStatus =
   | "pending"
-  | "confirmed"
-  | "preparing"
-  | "out_for_delivery"
-  | "delivered"
+  | "in_progress"
+  | "completed"
   | "cancelled";
 
 export interface Product {
@@ -70,6 +68,19 @@ export interface OrderItem {
   quantity: number;
 }
 
+export interface Payment {
+  id: string;
+  order_id: string;
+  user_id?: string | null;
+  customer_name: string;
+  payment_method: string;
+  amount: number;
+  payment_status: string;
+  proof_of_payment?: string | null;
+  reference_number?: string | null;
+  created_at?: string;
+}
+
 export interface ContactMessage {
   id: string;
   name: string;
@@ -77,5 +88,9 @@ export interface ContactMessage {
   subject?: string | null;
   message: string;
   is_read?: boolean;
+  status?: "new" | "read" | "replied" | string | null;
+  admin_reply?: string | null;
+  replied_at?: string | null;
+  replied_by?: string | null;
   created_at?: string;
 }

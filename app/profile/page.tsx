@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, signOutUser, updateProfile } from "@/lib/auth";
+import { getOrderStatusClass, getOrderStatusLabel } from "@/lib/orderStatus";
 import { getUserOrders } from "@/lib/orders";
 import { supabase } from "@/lib/supabaseClient";
 import type { Order, Profile } from "@/lib/types";
 import "./profile.css";
-
-const pesoFormatter = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
-const formatPrice = (value: number) => pesoFormatter.format(value / 100);
-
+import { formatPrice } from "@/lib/format";
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -53,6 +51,11 @@ export default function ProfilePage() {
           getUserOrders(user.id).catch(() => [] as Order[]),
         ]);
 
+        if (!profileData) {
+          router.push("/login");
+          return;
+        }
+
         setProfile(profileData);
         setOrders(ordersData);
         setEditForm({
@@ -90,6 +93,10 @@ export default function ProfilePage() {
     try {
       await updateProfile(editForm);
       const updated = await getProfile();
+      if (!updated) {
+        router.push("/login");
+        return;
+      }
       setProfile(updated);
       setSaveMsg("Profile updated successfully!");
       setTab("info");
@@ -171,7 +178,9 @@ export default function ProfilePage() {
                 <div key={order.id} className="profile-order-card">
                   <div className="profile-order-header">
                     <span className="profile-order-id">#{order.id.slice(0, 8)}</span>
-                    <span className={`status-badge status-${order.status}`}>{order.status.replace(/_/g, " ")}</span>
+                    <span className={`status-badge ${getOrderStatusClass(order.status)}`}>
+                      {getOrderStatusLabel(order.status)}
+                    </span>
                     <span className="profile-order-date">
                       {order.created_at ? new Date(order.created_at).toLocaleDateString("en-PH") : ""}
                     </span>

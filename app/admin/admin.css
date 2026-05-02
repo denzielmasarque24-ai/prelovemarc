@@ -253,6 +253,8 @@
 }
 
 .status-pending    { background: #fff3cd; color: #856404; }
+.status-in_progress { background: #cff4fc; color: #055160; }
+.status-completed { background: #d4edda; color: #155724; }
 .status-confirmed  { background: #cff4fc; color: #055160; }
 .status-preparing  { background: #e2d9f3; color: #432874; }
 .status-out_for_delivery { background: #d1ecf1; color: #0c5460; }

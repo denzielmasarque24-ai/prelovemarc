@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabaseClient";
+import { normalizeOrderStatus } from "@/lib/orderStatus";
 import type { CartItem, Order } from "@/lib/types";
 
 export type DeliveryOption = "pickup" | "delivery";
@@ -23,8 +24,9 @@ export interface CheckoutOrderInput {
   paymentProof?: string;
 }
 
-export async function placeCheckoutOrder(input: CheckoutOrderInput) {
+export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<string> {
   const orderId = crypto.randomUUID();
+
   const {
     data: { session },
     error: sessionError,
@@ -32,9 +34,11 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput) {
 
   if (sessionError) throw new Error(sessionError.message);
 
+  const userId = session?.user?.id ?? null;
+
   const { error: orderError } = await supabase.from("orders").insert({
     id: orderId,
-    user_id: session?.user?.id ?? null,
+    user_id: userId,
     customer_name: input.customerName,
     phone: input.phone,
     address: input.address,
@@ -44,9 +48,9 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput) {
     zip_code: input.zipCode,
     notes: input.notes?.trim() || null,
     payment_method: input.paymentMethod,
-    delivery_option: input.deliveryOption,
+    delivery_option: input.deliveryOption,   // ← always saved, never null
     total: input.total,
-    status: "pending",
+    status: normalizeOrderStatus("pending"),
     reference_number: input.referenceNumber ?? null,
     payment_proof: input.paymentProof ?? null,
   });
@@ -62,6 +66,25 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput) {
 
   const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
   if (itemsError) throw new Error(itemsError.message);
+
+  // Insert payment record — always in sync with the order
+  const paymentStatus = input.paymentMethod === "cod" ? "pending" : "completed";
+  const { error: paymentError } = await supabase.from("payments").insert({
+    id: crypto.randomUUID(),
+    order_id: orderId,
+    user_id: userId,
+    customer_name: input.customerName,
+    payment_method: input.paymentMethod,
+    amount: input.total,
+    payment_status: paymentStatus,
+    proof_of_payment: input.paymentProof ?? null,
+    reference_number: input.referenceNumber ?? null,
+  });
+
+  // Log but do not throw — order is already saved, payment record is secondary
+  if (paymentError) {
+    console.error("Failed to insert payment record:", paymentError.message);
+  }
 
   return orderId;
 }

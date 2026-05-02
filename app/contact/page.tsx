@@ -33,7 +33,6 @@ export default function ContactPage() {
       email: form.email.trim().toLowerCase(),
       subject: form.subject.trim() || null,
       message: form.message.trim(),
-      is_read: false,
     });
 
     setSending(false);

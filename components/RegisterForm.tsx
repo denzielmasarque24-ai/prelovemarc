@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { setSession } from "@/lib/storage";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ADMIN_EMAIL = "admin@gmail.com";
@@ -192,38 +191,8 @@ export default function RegisterForm({ onClose, onSwitchToLogin }: RegisterFormP
         return;
       }
 
-      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password: normalizedPassword,
-      });
-
-      if (loginError || !loginData.user || !loginData.session) {
-        console.error("[RegisterForm] auto-login error:", loginError);
-        showSignupError(loginError?.message || "Account created, but automatic login failed.", setError);
-        return;
-      }
-
-      const { data: profile, error: roleError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", loginData.user.id)
-        .single<{ role: "admin" | "user" | null }>();
-
-      if (roleError || !profile) {
-        showSignupError("User profile not found", setError);
-        return;
-      }
-
-      const redirectRole = profile.role ?? "user";
-
-      setSession({
-        fullName: fullName.trim() || loginData.user.email?.split("@")[0] || "User",
-        email: loginData.user.email || normalizedEmail,
-        role: redirectRole,
-      });
-
       onClose?.();
-      router.push(redirectRole === "admin" ? "/admin" : "/");
+      router.push(`/auth/verify?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[RegisterForm] unexpected error:", msg);

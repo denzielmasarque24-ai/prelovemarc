@@ -10,16 +10,7 @@ import {
   removeFromCart,
   saveCart,
 } from '@/lib/storage';
-import './cart.css';
-
-const pesoFormatter = new Intl.NumberFormat('en-PH', {
-  style: 'currency',
-  currency: 'PHP',
-});
-
-function formatPrice(price: number) {
-  return pesoFormatter.format(price / 100);
-}
+import { formatPrice } from '@/lib/format';
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);

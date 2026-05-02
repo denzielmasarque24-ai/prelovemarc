@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminGetDashboardStats } from '@/lib/admin';
-
-const pesoFormatter = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
-const formatPrice = (v: number) => pesoFormatter.format(v / 100);
+import { getOrderStatusClass, getOrderStatusLabel } from '@/lib/orderStatus';
+import { formatPrice } from '@/lib/format';
 
 type Stats = Awaited<ReturnType<typeof adminGetDashboardStats>>;
 
@@ -31,8 +30,12 @@ export default function AdminDashboard() {
           <p className="admin-stat-value pink">{stats?.totalOrders ?? '—'}</p>
         </div>
         <div className="admin-stat-card">
-          <p className="admin-stat-label">Revenue (Delivered)</p>
+          <p className="admin-stat-label">Revenue (Completed)</p>
           <p className="admin-stat-value">{stats ? formatPrice(stats.totalRevenue) : '—'}</p>
+        </div>
+        <div className="admin-stat-card">
+          <p className="admin-stat-label">Payments</p>
+          <p className="admin-stat-value pink">{stats?.totalPayments ?? '—'}</p>
         </div>
         <div className="admin-stat-card">
           <p className="admin-stat-label">Customers</p>
@@ -74,7 +77,9 @@ export default function AdminDashboard() {
                     </td>
                     <td>{formatPrice(o.total)}</td>
                     <td>
-                      <span className={`status-badge status-${o.status}`}>{o.status}</span>
+                      <span className={`status-badge ${getOrderStatusClass(o.status)}`}>
+                        {getOrderStatusLabel(o.status)}
+                      </span>
                     </td>
                     <td>{new Date(o.created_at).toLocaleDateString('en-PH')}</td>
                   </tr>
@@ -92,6 +97,7 @@ export default function AdminDashboard() {
       <div className="admin-quick-links" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <Link href="/admin/products" className="admin-btn admin-btn-primary">+ Add Product</Link>
         <Link href="/admin/orders" className="admin-btn admin-btn-outline">Manage Orders</Link>
+        <Link href="/admin/payments" className="admin-btn admin-btn-outline">View Payments</Link>
         <Link href="/admin/messages" className="admin-btn admin-btn-outline">View Messages</Link>
       </div>
     </>

@@ -2,33 +2,45 @@
 
 import { useEffect, useState } from 'react';
 import ProductGrid from '@/components/ProductGrid';
-import { products as fallbackProducts } from '@/lib/products';
 import { fetchProductsFromSupabase } from '@/lib/supabaseShop';
-import type { Product, ProductCategory } from '@/lib/types';
+import type { Product } from '@/lib/types';
 
-const categories = ['All', 'Tops', 'Bottoms', 'Dresses'] as const;
+const categories = ['all', 'tops', 'bottoms', 'dresses'] as const;
 type ShopCategory = (typeof categories)[number];
+
+const categoryLabels: Record<ShopCategory, string> = {
+  all: 'All',
+  tops: 'Tops',
+  bottoms: 'Bottoms',
+  dresses: 'Dresses',
+};
 
 type ShopClientProps = { initialCategory: ShopCategory };
 
 export default function ShopClient({ initialCategory }: ShopClientProps) {
-  const [allProducts, setAllProducts] = useState<Product[]>(fallbackProducts);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<ShopCategory>(initialCategory);
   const [search, setSearch] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => { setSelectedCategory(initialCategory); }, [initialCategory]);
 
   useEffect(() => {
-    fetchProductsFromSupabase().then((data) => {
-      if (data && data.length > 0) setAllProducts(data);
-    }).catch(() => null);
+    setIsLoading(true);
+    fetchProductsFromSupabase()
+      .then((data) => setAllProducts(data ?? []))
+      .catch((error) => {
+        console.error('Failed to load shop products:', error);
+        setAllProducts([]);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const filteredProducts = allProducts.filter((p) => {
-    const matchCategory = selectedCategory === 'All' || p.category === selectedCategory;
+    const matchCategory = selectedCategory === 'all' || p.category.toLowerCase() === selectedCategory;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    const matchPrice = !maxPrice || p.price <= Number(maxPrice) * 100;
+    const matchPrice = !maxPrice || p.price <= Number(maxPrice);
     return matchCategory && matchSearch && matchPrice;
   });
 
@@ -37,8 +49,6 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
       <p className="sr-only">Shop Page Working</p>
 
       <div className="shop-container">
-        <h1 className="shop-title">Shop by Category</h1>
-
         <div className="shop-filters">
           <div className="category-filter">
             {categories.map((category) => (
@@ -48,7 +58,7 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
                 className={`filter-btn ${selectedCategory === category ? 'active' : ''}`}
                 onClick={() => setSelectedCategory(category)}
               >
-                {category}
+                {categoryLabels[category]}
               </button>
             ))}
           </div>
@@ -56,14 +66,14 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
           <div className="shop-search-row">
             <input
               className="shop-search-input"
-              placeholder="Search products…"
+              placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <input
               className="shop-search-input"
               type="number"
-              placeholder="Max price (₱)"
+              placeholder="Max price (PHP)"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
               style={{ width: 140 }}
@@ -75,7 +85,13 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
           <ProductGrid products={filteredProducts} />
         </div>
 
-        {filteredProducts.length === 0 && (
+        {isLoading && (
+          <div className="no-products">
+            <p>Loading products...</p>
+          </div>
+        )}
+
+        {!isLoading && filteredProducts.length === 0 && (
           <div className="no-products">
             <p>No products found.</p>
           </div>
