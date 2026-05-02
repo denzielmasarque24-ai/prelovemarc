@@ -5,6 +5,23 @@ import { supabase } from '@/lib/supabase';
 import { adminGetMessages, adminMarkMessageRead } from '@/lib/admin';
 import type { ContactMessage } from '@/lib/types';
 
+type Conversation = {
+  email: string;
+  name: string;
+  messages: ContactMessage[];
+  latest: ContactMessage;
+  latestTime: string | null;
+  hasUnread: boolean;
+};
+
+function getTimeValue(value?: string | null) {
+  return value ? new Date(value).getTime() : 0;
+}
+
+function getMessageActivityTime(message: ContactMessage) {
+  return Math.max(getTimeValue(message.replied_at), getTimeValue(message.created_at));
+}
+
 function formatChatTime(value?: string | null) {
   if (!value) return '';
 
@@ -31,9 +48,40 @@ function getLatestPreview(message: ContactMessage) {
   return message.admin_reply?.trim() || message.message || 'No message preview';
 }
 
+function buildConversations(messages: ContactMessage[]) {
+  const grouped = new Map<string, ContactMessage[]>();
+
+  for (const message of messages) {
+    const email = message.email?.trim().toLowerCase();
+    if (!email) continue;
+
+    grouped.set(email, [...(grouped.get(email) ?? []), message]);
+  }
+
+  return [...grouped.entries()]
+    .map(([email, rows]) => {
+      const sortedMessages = [...rows].sort(
+        (a, b) => getTimeValue(a.created_at) - getTimeValue(b.created_at),
+      );
+      const latest = [...sortedMessages].sort(
+        (a, b) => getMessageActivityTime(b) - getMessageActivityTime(a),
+      )[0];
+
+      return {
+        email,
+        name: latest.name || sortedMessages[0]?.name || 'Customer',
+        messages: sortedMessages,
+        latest,
+        latestTime: latest.replied_at || latest.created_at || null,
+        hasUnread: sortedMessages.some((message) => !message.is_read),
+      } satisfies Conversation;
+    })
+    .sort((a, b) => getTimeValue(b.latestTime) - getTimeValue(a.latestTime));
+}
+
 export default function AdminMessagesPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [selectedEmail, setSelectedEmail] = useState('');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [replyText, setReplyText] = useState('');
@@ -41,17 +89,21 @@ export default function AdminMessagesPage() {
   const [replySuccess, setReplySuccess] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
 
-  const filteredMessages = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return messages;
+  const conversations = useMemo(() => buildConversations(messages), [messages]);
 
-    return messages.filter((message) => {
+  const filteredConversations = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return conversations;
+
+    return conversations.filter((conversation) => {
       const haystack = [
-        message.name,
-        message.email,
-        message.subject,
-        message.message,
-        message.admin_reply,
+        conversation.name,
+        conversation.email,
+        ...conversation.messages.flatMap((message) => [
+          message.subject,
+          message.message,
+          message.admin_reply,
+        ]),
       ]
         .filter(Boolean)
         .join(' ')
@@ -59,22 +111,31 @@ export default function AdminMessagesPage() {
 
       return haystack.includes(query);
     });
-  }, [messages, search]);
+  }, [conversations, search]);
 
-  const selected = useMemo(
-    () => messages.find((message) => message.id === selectedId) ?? filteredMessages[0] ?? null,
-    [filteredMessages, messages, selectedId],
+  const selectedConversation = useMemo(
+    () =>
+      conversations.find((conversation) => conversation.email === selectedEmail) ??
+      filteredConversations[0] ??
+      null,
+    [conversations, filteredConversations, selectedEmail],
   );
+
+  const replyTarget = useMemo(() => {
+    if (!selectedConversation) return null;
+
+    const unreplied = [...selectedConversation.messages]
+      .reverse()
+      .find((message) => !message.admin_reply);
+
+    return unreplied ?? selectedConversation.messages[selectedConversation.messages.length - 1] ?? null;
+  }, [selectedConversation]);
 
   const loadMessages = async () => {
     try {
       const data = await adminGetMessages();
       setMessages(data);
       setError('');
-
-      if (!selectedId && data[0]) {
-        setSelectedId(data[0].id);
-      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load messages.');
     }
@@ -89,23 +150,34 @@ export default function AdminMessagesPage() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const handleSelect = async (message: ContactMessage) => {
-    setSelectedId(message.id);
+  useEffect(() => {
+    if (!selectedEmail && conversations[0]) {
+      setSelectedEmail(conversations[0].email);
+    }
+  }, [conversations, selectedEmail]);
+
+  const handleSelect = async (conversation: Conversation) => {
+    setSelectedEmail(conversation.email);
     setReplyText('');
     setReplyError('');
     setReplySuccess('');
 
-    if (!message.is_read) {
-      await adminMarkMessageRead(message.id).catch(() => null);
-      setMessages((prev) =>
-        prev.map((item) => (item.id === message.id ? { ...item, is_read: true } : item)),
-      );
-    }
+    const unreadMessages = conversation.messages.filter((message) => !message.is_read);
+    if (!unreadMessages.length) return;
+
+    await Promise.all(unreadMessages.map((message) => adminMarkMessageRead(message.id).catch(() => null)));
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.email?.trim().toLowerCase() === conversation.email
+          ? { ...message, is_read: true }
+          : message,
+      ),
+    );
   };
 
   const handleSendReply = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selected) return;
+    if (!replyTarget) return;
 
     const adminReply = replyText.trim();
     if (!adminReply) {
@@ -134,7 +206,7 @@ export default function AdminMessagesPage() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          messageId: selected.id,
+          messageId: replyTarget.id,
           reply: adminReply,
         }),
       });
@@ -152,7 +224,7 @@ export default function AdminMessagesPage() {
       const repliedAt = result?.repliedAt ?? new Date().toISOString();
       const repliedBy = result?.repliedBy ?? null;
       const updatedMessage: ContactMessage = {
-        ...selected,
+        ...replyTarget,
         is_read: true,
         status: 'replied',
         admin_reply: adminReply,
@@ -161,7 +233,7 @@ export default function AdminMessagesPage() {
       };
 
       setMessages((prev) =>
-        prev.map((message) => (message.id === selected.id ? updatedMessage : message)),
+        prev.map((message) => (message.id === replyTarget.id ? updatedMessage : message)),
       );
       setReplyText('');
       setReplySuccess('Reply sent.');
@@ -179,7 +251,7 @@ export default function AdminMessagesPage() {
       <aside className="admin-chat-sidebar">
         <div className="admin-chat-sidebar-head">
           <h1>Chats</h1>
-          <span>{messages.length}</span>
+          <span>{conversations.length}</span>
         </div>
 
         <input
@@ -192,28 +264,28 @@ export default function AdminMessagesPage() {
         {error ? <div className="admin-chat-error">{error}</div> : null}
 
         <div className="admin-chat-list">
-          {filteredMessages.length ? (
-            filteredMessages.map((message) => {
-              const isActive = selected?.id === message.id;
-              const preview = getLatestPreview(message);
-              const time = formatPreviewTime(message.replied_at || message.created_at);
+          {filteredConversations.length ? (
+            filteredConversations.map((conversation) => {
+              const isActive = selectedConversation?.email === conversation.email;
+              const preview = getLatestPreview(conversation.latest);
+              const time = formatPreviewTime(conversation.latestTime);
 
               return (
                 <button
-                  key={message.id}
+                  key={conversation.email}
                   type="button"
                   className={`admin-chat-item${isActive ? ' active' : ''}`}
-                  onClick={() => void handleSelect(message)}
+                  onClick={() => void handleSelect(conversation)}
                 >
-                  <span className="admin-chat-avatar">{getInitial(message.name)}</span>
+                  <span className="admin-chat-avatar">{getInitial(conversation.name)}</span>
                   <span className="admin-chat-summary">
                     <span className="admin-chat-name-row">
-                      <strong>{message.name}</strong>
+                      <strong>{conversation.name}</strong>
                       <time>{time}</time>
                     </span>
                     <span className="admin-chat-preview">{preview}</span>
                   </span>
-                  {!message.is_read ? <span className="admin-unread-dot" aria-label="Unread message" /> : null}
+                  {conversation.hasUnread ? <span className="admin-unread-dot" aria-label="Unread message" /> : null}
                 </button>
               );
             })
@@ -224,39 +296,43 @@ export default function AdminMessagesPage() {
       </aside>
 
       <section className="admin-chat-panel">
-        {selected ? (
+        {selectedConversation ? (
           <>
             <header className="admin-chat-header">
-              <span className="admin-chat-avatar large">{getInitial(selected.name)}</span>
+              <span className="admin-chat-avatar large">{getInitial(selectedConversation.name)}</span>
               <div>
-                <h2>{selected.name}</h2>
-                <p>{selected.email}</p>
+                <h2>{selectedConversation.name}</h2>
+                <p>{selectedConversation.email}</p>
               </div>
             </header>
 
             <div className="admin-chat-body">
-              <div className="admin-chat-date">{formatChatTime(selected.created_at)}</div>
+              <div className="admin-chat-date">{formatChatTime(selectedConversation.latestTime)}</div>
 
-              <div className="admin-message-row customer">
-                <div className="admin-message-bubble customer">
-                  <span>{selected.name}</span>
-                  {selected.subject ? <strong>{selected.subject}</strong> : null}
-                  <p>{selected.message}</p>
-                </div>
-                <time>{formatChatTime(selected.created_at)}</time>
-              </div>
-
-              {selected.admin_reply ? (
-                <div className="admin-message-row shop">
-                  <div className="admin-message-bubble shop">
-                    <span>PRELOVE SHOP</span>
-                    <p>{selected.admin_reply}</p>
+              {selectedConversation.messages.map((message) => (
+                <div key={message.id} className="admin-thread-group">
+                  <div className="admin-message-row customer">
+                    <div className="admin-message-bubble customer">
+                      <span>{message.name}</span>
+                      {message.subject ? <strong>{message.subject}</strong> : null}
+                      <p>{message.message}</p>
+                    </div>
+                    <time>{formatChatTime(message.created_at)}</time>
                   </div>
-                  <time>{formatChatTime(selected.replied_at)}</time>
+
+                  {message.admin_reply ? (
+                    <div className="admin-message-row shop">
+                      <div className="admin-message-bubble shop">
+                        <span>PRELOVE SHOP</span>
+                        <p>{message.admin_reply}</p>
+                      </div>
+                      <time>{formatChatTime(message.replied_at)}</time>
+                    </div>
+                  ) : (
+                    <p className="admin-waiting-reply">Waiting for admin reply...</p>
+                  )}
                 </div>
-              ) : (
-                <p className="admin-waiting-reply">Waiting for admin reply...</p>
-              )}
+              ))}
             </div>
 
             <form className="admin-chat-composer" onSubmit={handleSendReply}>
@@ -274,7 +350,7 @@ export default function AdminMessagesPage() {
                   }}
                   disabled={isSendingReply}
                 />
-                <button type="submit" disabled={isSendingReply}>
+                <button type="submit" disabled={isSendingReply || !replyTarget}>
                   {isSendingReply ? 'Sending...' : 'Send'}
                 </button>
               </div>
