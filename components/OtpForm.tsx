@@ -32,11 +32,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (cooldownRef.current) window.clearInterval(cooldownRef.current);
     cooldownRef.current = window.setInterval(() => {
       setResendCooldown((s) => {
-        if (s <= 1) {
-          window.clearInterval(cooldownRef.current!);
-          cooldownRef.current = null;
-          return 0;
-        }
+        if (s <= 1) { window.clearInterval(cooldownRef.current!); cooldownRef.current = null; return 0; }
         return s - 1;
       });
     }, 1000);
@@ -73,7 +69,8 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     setError("");
     setSuccess("");
 
-    const { error: verifyError } = await supabase.auth.verifyOtp({
+    // Step 1: Verify OTP
+    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
       email: pendingEmail,
       token: otpCode,
       type: "email",
@@ -82,11 +79,38 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (verifyError) {
       console.error("[OtpForm] verifyOtp error:", verifyError);
       setLoading(false);
-      setError(`${verifyError.message} — Please check the code and try again.`);
+      setError(verifyError.message);
       return;
     }
 
-    // Sign out the OTP session — user must log in manually
+    const userId = verifyData.user?.id;
+
+    // Step 2: Set password so user can log in with email+password later
+    const storedPassword = sessionStorage.getItem("pending_password") ?? "";
+    if (storedPassword) {
+      const { error: pwError } = await supabase.auth.updateUser({ password: storedPassword });
+      if (pwError) console.error("[OtpForm] updateUser password error:", pwError);
+    }
+
+    // Step 3: Save profile
+    if (userId) {
+      const fullName = sessionStorage.getItem("pending_full_name") ?? "";
+      const phone    = sessionStorage.getItem("pending_phone") ?? "";
+      const role     = sessionStorage.getItem("pending_role") ?? "user";
+
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        { id: userId, full_name: fullName, phone, role },
+        { onConflict: "id" },
+      );
+      if (profileError) console.error("[OtpForm] profile upsert error:", profileError);
+    }
+
+    // Step 4: Clear stored data and sign out OTP session
+    sessionStorage.removeItem("pending_full_name");
+    sessionStorage.removeItem("pending_phone");
+    sessionStorage.removeItem("pending_password");
+    sessionStorage.removeItem("pending_role");
+
     await supabase.auth.signOut();
 
     setLoading(false);
@@ -105,7 +129,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
 
     if (resendError) {
       console.error("[OtpForm] resend error:", resendError);
-      setError(`Could not resend code: ${resendError.message}`);
+      setError(resendError.message);
     } else {
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
@@ -144,12 +168,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       {error   && <div className="auth-banner auth-banner-error">{error}</div>}
       {success && <div className="auth-banner auth-banner-success">{success}</div>}
 
-      <button
-        type="button"
-        className="auth-submit-btn"
-        onClick={handleVerify}
-        disabled={loading}
-      >
+      <button type="button" className="auth-submit-btn" onClick={handleVerify} disabled={loading}>
         {loading
           ? <><span className="auth-spinner" aria-hidden="true" /> Verifying…</>
           : "Verify Code"}

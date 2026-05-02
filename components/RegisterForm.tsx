@@ -7,18 +7,6 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ADMIN_EMAIL = "admin@gmail.com";
 const SIGNUP_COOLDOWN_MS = 5000;
 
-function mapError(message?: string): string {
-  if (!message) return "Sign up failed. Please try again.";
-  const m = message.toLowerCase();
-  if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email")))
-    return "This email is already registered. Please log in instead.";
-  if (m.includes("rate limit") || m.includes("too many requests"))
-    return "Too many attempts. Please wait before trying again.";
-  if (m.includes("password") && m.includes("weak"))
-    return "Password is too weak. Use at least 6 characters.";
-  return message;
-}
-
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
     return (
@@ -45,7 +33,7 @@ type RegisterFormProps = {
   onOtpSent?: (email: string) => void;
 };
 
-export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmail, onOtpSent }: RegisterFormProps) {
+export default function RegisterForm({ onSwitchToLogin, onDuplicateEmail, onOtpSent }: RegisterFormProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -67,7 +55,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
     return () => { if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current); };
   }, []);
 
-  const startCooldown = () => {
+  function startCooldown() {
     cooldownUntilRef.current = Date.now() + SIGNUP_COOLDOWN_MS;
     setCooldownSeconds(Math.ceil(SIGNUP_COOLDOWN_MS / 1000));
     if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current);
@@ -81,15 +69,15 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
       }
       setCooldownSeconds(Math.ceil(remaining / 1000));
     }, 250);
-  };
+  }
 
-  const validate = (normalizedEmail: string) => {
+  function validate(normalizedEmail: string) {
     if (!fullName.trim()) return "Full name is required.";
     if (!emailRegex.test(normalizedEmail)) return "Please enter a valid email address.";
     if (password.trim().length < 6) return "Password must be at least 6 characters.";
     if (password.trim() !== confirmPassword.trim()) return "Passwords do not match.";
     return null;
-  };
+  }
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -109,51 +97,35 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
     setIsSubmitting(true);
 
     try {
-      // Step 1: Create the Supabase auth user
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password: normalizedPassword,
-      });
-
-      if (signUpError) {
-        const m = signUpError.message.toLowerCase();
-        if (m.includes("user already registered") || (m.includes("duplicate") && m.includes("email"))) {
-          onDuplicateEmail?.(normalizedEmail);
-          return;
-        }
-        setError(mapError(signUpError.message));
-        return;
-      }
-
-      if (!data.user) { setError("Sign up returned no user. Please try again."); return; }
-
-      // Step 2: Sign out immediately — prevent auto-login before OTP verified
-      await supabase.auth.signOut();
-
-      // Step 3: Save profile
-      await supabase.from("profiles").upsert(
-        { id: data.user.id, full_name: fullName.trim(), phone: phone.trim(), role },
-        { onConflict: "id" },
-      );
-
-      // Step 4: Send OTP via Supabase — do NOT create a duplicate user
+      // Single step: send OTP — Supabase creates the user if needed
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: normalizedEmail,
-        options: { shouldCreateUser: false },
+        options: { shouldCreateUser: true },
       });
 
       if (otpError) {
-        console.error('[RegisterForm] signInWithOtp error:', otpError);
-        setError(`Failed to send verification code: ${otpError.message}`);
+        console.error("[RegisterForm] signInWithOtp error:", otpError);
+        const m = otpError.message.toLowerCase();
+        if (m.includes("already registered") || m.includes("duplicate")) {
+          onDuplicateEmail?.(normalizedEmail);
+          return;
+        }
+        setError(otpError.message);
         return;
       }
 
-      // OTP sent — switch modal to OTP screen (do NOT close or navigate)
+      // Store profile data — saved to DB after OTP is verified
+      sessionStorage.setItem("pending_full_name", fullName.trim());
+      sessionStorage.setItem("pending_phone", phone.trim());
+      sessionStorage.setItem("pending_password", normalizedPassword);
+      sessionStorage.setItem("pending_role", role);
+
       onOtpSent?.(normalizedEmail);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error("[RegisterForm] unexpected error:", msg);
       if (msg.toLowerCase().includes("failed to fetch")) {
-        setError("Cannot reach the server. Check your internet connection or try again later.");
+        setError("Cannot reach the server. Check your internet connection.");
         return;
       }
       setError(msg || "Something went wrong. Please try again.");
@@ -226,7 +198,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
 
       <button type="submit" className="auth-submit-btn" disabled={isSubmitDisabled}>
         {isSubmitting ? (
-          <><span className="auth-spinner" aria-hidden="true" /> Creating account...</>
+          <><span className="auth-spinner" aria-hidden="true" /> Sending code...</>
         ) : cooldownSeconds > 0 ? (
           `Try again in ${cooldownSeconds}s`
         ) : (
