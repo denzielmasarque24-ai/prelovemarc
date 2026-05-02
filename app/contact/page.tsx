@@ -5,16 +5,33 @@ import { supabase } from '@/lib/supabaseClient';
 import type { ContactMessage } from '@/lib/types';
 import './contact.css';
 
-const contactItems = [
-  { label: 'Email', value: 'prelove.shop@gmail.com' },
-  { label: 'Phone', value: '09xx xxx xxxx' },
-  { label: 'Instagram', value: '@prelove.shop' },
-  { label: 'Facebook', value: 'prelove shop' },
-];
+function formatChatTime(value?: string | null) {
+  if (!value) return '';
+
+  return new Date(value).toLocaleString('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function formatPreviewTime(value?: string | null) {
+  if (!value) return '';
+
+  return new Date(value).toLocaleTimeString('en-PH', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getPreview(message: ContactMessage) {
+  return message.admin_reply?.trim() || message.message || 'No message preview';
+}
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [chatEmail, setChatEmail] = useState('');
+  const [selectedId, setSelectedId] = useState('');
+  const [search, setSearch] = useState('');
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState('');
@@ -23,6 +40,24 @@ export default function ContactPage() {
   const [error, setError] = useState('');
 
   const formEmail = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
+
+  const filteredMessages = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return messages;
+
+    return messages.filter((message) =>
+      [message.subject, message.message, message.admin_reply]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [messages, search]);
+
+  const selected = useMemo(
+    () => messages.find((message) => message.id === selectedId) ?? filteredMessages[0] ?? null,
+    [filteredMessages, messages, selectedId],
+  );
 
   const fetchMessages = async (email: string, showLoading = false) => {
     if (!email) {
@@ -37,28 +72,32 @@ export default function ContactPage() {
       .from('contact_messages')
       .select('id, name, email, subject, message, admin_reply, created_at, replied_at')
       .eq('email', email)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (fetchError) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('contact_messages')
         .select('id, name, email, subject, message, created_at')
         .eq('email', email)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (fallbackError) {
-        setMessageError('Unable to load your chat right now.');
+        setMessageError('Unable to load your chats right now.');
         setLoadingMessages(false);
         return;
       }
 
-      setMessages((fallbackData ?? []) as ContactMessage[]);
+      const fallbackMessages = (fallbackData ?? []) as ContactMessage[];
+      setMessages(fallbackMessages);
+      if (!selectedId && fallbackMessages[0]) setSelectedId(fallbackMessages[0].id);
       setMessageError('');
       setLoadingMessages(false);
       return;
     }
 
-    setMessages((data ?? []) as ContactMessage[]);
+    const nextMessages = (data ?? []) as ContactMessage[];
+    setMessages(nextMessages);
+    if (!selectedId && nextMessages[0]) setSelectedId(nextMessages[0].id);
     setMessageError('');
     setLoadingMessages(false);
   };
@@ -83,15 +122,6 @@ export default function ContactPage() {
 
     return () => window.clearInterval(interval);
   }, [chatEmail]);
-
-  const formatMessageTime = (value?: string | null) => {
-    if (!value) return '';
-
-    return new Date(value).toLocaleString('en-PH', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,7 +148,8 @@ export default function ContactPage() {
     };
 
     setChatEmail(submittedEmail);
-    setMessages((current) => [...current, optimisticMessage]);
+    setSelectedId(optimisticMessage.id);
+    setMessages((current) => [optimisticMessage, ...current]);
 
     const { error: dbError } = await supabase.from('contact_messages').insert({
       name: optimisticMessage.name,
@@ -142,23 +173,83 @@ export default function ContactPage() {
 
   return (
     <main className="contact-main">
-      <section className="messenger-shell" aria-label="PRELOVE SHOP contact chat">
-        <aside className="messenger-profile">
-          <div className="shop-avatar-wrap">
-            <img src="/images/logo.png" alt="PRELOVE SHOP logo" className="shop-avatar" />
-            <span className="online-dot" aria-hidden="true" />
+      <section className="messenger-shell" aria-label="PRELOVE SHOP customer chats">
+        <aside className="user-chat-sidebar">
+          <div className="user-chat-head">
+            <h1>Chats</h1>
+            <span>{messages.length}</span>
           </div>
-          <h1>PRELOVE SHOP</h1>
-          <p className="shop-status">Online</p>
-          <p className="shop-copy">Send us a message and track the reply in this chat.</p>
 
-          <div className="profile-contact-list">
-            {contactItems.map((item) => (
-              <div key={item.label} className="profile-contact-item">
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
+          <div className="user-chat-identity">
+            <label>
+              Name
+              <input
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Your name"
+                required
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                placeholder="you@example.com"
+                required
+              />
+            </label>
+            <label>
+              Subject
+              <input
+                value={form.subject}
+                onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                placeholder="Optional"
+              />
+            </label>
+          </div>
+
+          <input
+            className="user-chat-search"
+            placeholder="Search messages"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+
+          <div className="user-chat-list">
+            {!chatEmail ? (
+              <p className="chat-empty">Enter your email to load your chats.</p>
+            ) : loadingMessages ? (
+              <p className="chat-empty">Loading chats...</p>
+            ) : messageError ? (
+              <p className="chat-empty">{messageError}</p>
+            ) : filteredMessages.length ? (
+              filteredMessages.map((message) => {
+                const active = selected?.id === message.id;
+
+                return (
+                  <button
+                    key={message.id}
+                    type="button"
+                    className={`user-chat-item${active ? ' active' : ''}`}
+                    onClick={() => setSelectedId(message.id)}
+                  >
+                    <span className="user-chat-avatar">P</span>
+                    <span className="user-chat-summary">
+                      <span className="user-chat-name-row">
+                        <strong>PRELOVE SHOP</strong>
+                        <time>{formatPreviewTime(message.replied_at || message.created_at)}</time>
+                      </span>
+                      <span className="user-chat-preview">{getPreview(message)}</span>
+                    </span>
+                    {!message.admin_reply ? <span className="user-unread-dot" aria-label="Waiting for admin reply" /> : null}
+                  </button>
+                );
+              })
+            ) : (
+              <p className="chat-empty">No chats yet.</p>
+            )}
           </div>
         </aside>
 
@@ -169,41 +260,11 @@ export default function ContactPage() {
             </div>
             <div>
               <h2>PRELOVE SHOP</h2>
-              <p>Online now</p>
+              <p>{chatEmail || 'Online now'}</p>
             </div>
           </header>
 
-          <form className="messenger-form" onSubmit={handleSubmit}>
-            <div className="chat-identity">
-              <label>
-                Name
-                <input
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  placeholder="Your name"
-                  required
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                  placeholder="you@example.com"
-                  required
-                />
-              </label>
-              <label>
-                Subject
-                <input
-                  value={form.subject}
-                  onChange={(event) => setForm({ ...form, subject: event.target.value })}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-
+          <form className="messenger-form user-messenger-form" onSubmit={handleSubmit}>
             {(success || error) && (
               <div className={error ? 'chat-alert error' : 'chat-alert success'}>
                 {error || success}
@@ -211,39 +272,33 @@ export default function ContactPage() {
             )}
 
             <div className="messenger-body" aria-live="polite">
-              {!chatEmail ? (
-                <p className="chat-empty">Enter your email to load your conversation.</p>
-              ) : loadingMessages ? (
-                <p className="chat-empty">Loading conversation...</p>
-              ) : messageError ? (
-                <p className="chat-empty">{messageError}</p>
-              ) : messages.length ? (
-                messages.map((message) => (
-                  <div key={message.id} className="chat-thread">
-                    <div className="message-row message-row-user">
-                      <div className="message-bubble user-bubble">
-                        <span className="sender-label">You</span>
-                        {message.subject ? <strong>{message.subject}</strong> : null}
-                        <p>{message.message}</p>
-                      </div>
-                      <time>{formatMessageTime(message.created_at)}</time>
-                    </div>
-
-                    {message.admin_reply ? (
-                      <div className="message-row message-row-admin">
-                        <div className="message-bubble admin-bubble">
-                          <span className="sender-label">Admin</span>
-                          <p>{message.admin_reply}</p>
-                        </div>
-                        <time>{formatMessageTime(message.replied_at)}</time>
-                      </div>
-                    ) : (
-                      <p className="waiting-reply">Waiting for admin reply...</p>
-                    )}
-                  </div>
-                ))
+              {!selected ? (
+                <p className="chat-empty">Select a chat or send a new message below.</p>
               ) : (
-                <p className="chat-empty">No messages yet. Start the conversation below.</p>
+                <div className="chat-thread">
+                  <div className="chat-date-badge">{formatChatTime(selected.created_at)}</div>
+
+                  <div className="message-row message-row-user">
+                    <div className="message-bubble user-bubble">
+                      <span className="sender-label">You</span>
+                      {selected.subject ? <strong>{selected.subject}</strong> : null}
+                      <p>{selected.message}</p>
+                    </div>
+                    <time>{formatChatTime(selected.created_at)}</time>
+                  </div>
+
+                  {selected.admin_reply ? (
+                    <div className="message-row message-row-admin">
+                      <div className="message-bubble admin-bubble">
+                        <span className="sender-label">Admin</span>
+                        <p>{selected.admin_reply}</p>
+                      </div>
+                      <time>{formatChatTime(selected.replied_at)}</time>
+                    </div>
+                  ) : (
+                    <p className="waiting-reply">Waiting for admin reply...</p>
+                  )}
+                </div>
               )}
             </div>
 

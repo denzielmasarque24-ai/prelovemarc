@@ -11,7 +11,7 @@ import { formatPrice } from "@/lib/format";
 
 const deliveryFee = 50;
 const gcashNumber = "PUT_REAL_GCASH_NUMBER_HERE";
-const gcashQr = "/images/gcash-qr.png";
+const gcashQr = "/images/gcash.png";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -271,6 +271,11 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="gcash-payment-main">
+                  <div className="gcash-qr-box">
+                    <span>Scan QR or send to number</span>
+                    <img src={gcashQr} alt="GCash QR code for PRELOVE SHOP payment" />
+                  </div>
+
                   <div className="gcash-number-box">
                     <div className="gcash-icon" aria-hidden="true">G</div>
                     <div>
@@ -278,11 +283,6 @@ export default function CheckoutPage() {
                       <strong>{gcashNumber}</strong>
                     </div>
                     <button type="button" onClick={handleCopyGcash}>Copy</button>
-                  </div>
-
-                  <div className="gcash-qr-box">
-                    <span>Scan QR Code to Pay</span>
-                    <img src={gcashQr} alt="GCash QR code for PRELOVE SHOP payment" />
                   </div>
                 </div>
 
