@@ -95,15 +95,25 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     const role     = sessionStorage.getItem("pending_role") ?? "user";
 
     if (userId) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert({ id: userId, full_name: fullName, phone, role }, { onConflict: "id" });
-      if (profileError) console.error("[OtpForm] profile error:", profileError);
+      // Sign in temporarily to save profile (RLS requires auth)
+      const storedPassword = sessionStorage.getItem("pending_password") ?? "";
+      if (storedPassword) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: pendingEmail,
+          password: storedPassword,
+        });
+        if (!signInErr) {
+          await supabase
+            .from("profiles")
+            .upsert({ id: userId, full_name: fullName, phone, role }, { onConflict: "id" });
+          await supabase.auth.signOut();
+        }
+      }
     }
 
     // Clean up all stored data
     ["pending_otp", "pending_otp_expires", "pending_full_name",
-     "pending_phone", "pending_role", "pending_user_id"].forEach((k) =>
+     "pending_phone", "pending_role", "pending_user_id", "pending_password"].forEach((k) =>
       sessionStorage.removeItem(k)
     );
 

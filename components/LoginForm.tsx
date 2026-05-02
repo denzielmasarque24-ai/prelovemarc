@@ -65,21 +65,25 @@ export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail, s
       }
 
       const user = data.user;
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, full_name")
         .eq("id", user.id)
-        .single<{ role: "admin" | "user" | null }>();
+        .single<{ role: string | null; full_name: string | null }>();
 
-      if (profileError || !profile) {
-        setError("User profile not found");
-        return;
+      // If profile missing, create a default one and continue
+      if (!profile) {
+        await supabase.from("profiles").upsert(
+          { id: user.id, full_name: user.email?.split("@")[0] ?? "User", role: "user" },
+          { onConflict: "id" }
+        );
       }
 
-      const role = profile.role ?? "user";
+      const role = profile?.role ?? "user";
+      const fullName = profile?.full_name?.trim() || user.email?.split("@")[0] || "User";
 
       setSession({
-        fullName: user.email?.split("@")[0] || "User",
+        fullName,
         email: user.email || trimmedEmail,
         role,
       });

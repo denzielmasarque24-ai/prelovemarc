@@ -115,6 +115,7 @@ export default function RegisterForm({ onSwitchToLogin, onDuplicateEmail, onOtpS
       sessionStorage.setItem("pending_phone",     phone.trim());
       sessionStorage.setItem("pending_role",      role);
       sessionStorage.setItem("pending_user_id",   data.user.id);
+      sessionStorage.setItem("pending_password",  normalizedPassword);
 
       // Step 4: Send OTP via Gmail and store code in sessionStorage
       const res = await fetch("/api/send-otp", {
