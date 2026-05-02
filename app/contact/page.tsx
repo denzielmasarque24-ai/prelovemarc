@@ -60,7 +60,7 @@ export default function ContactPage() {
     if (fetchError) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('contact_messages')
-        .select('id, name, email, subject, message, created_at')
+        .select('id, name, email, subject, message, admin_reply, created_at, replied_at')
         .eq('email', email)
         .order('created_at', { ascending: true });
 
@@ -222,7 +222,7 @@ export default function ContactPage() {
                       <time>{formatChatTime(message.created_at)}</time>
                     </div>
 
-                    {message.admin_reply ? (
+                    {message.admin_reply?.trim() ? (
                       <div className="chat-widget-row admin">
                         <div className="chat-widget-bubble admin">
                           <span>PRELOVE SHOP</span>

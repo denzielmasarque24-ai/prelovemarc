@@ -46,13 +46,6 @@ export async function POST(request: NextRequest) {
     !resendApiKey?.includes("placeholder");
   const canSendWithGmail = Boolean(gmailUser?.trim()) && Boolean(gmailAppPassword?.trim());
 
-  if (!canSendWithResend && !canSendWithGmail) {
-    return jsonError(
-      "Email server is not configured. Add either RESEND_API_KEY and RESEND_FROM_EMAIL, or GMAIL_USER and GMAIL_APP_PASSWORD, then restart the dev server.",
-      500,
-    );
-  }
-
   let body: ReplyRequestBody;
   try {
     body = (await request.json()) as ReplyRequestBody;
@@ -129,75 +122,7 @@ export async function POST(request: NextRequest) {
     return jsonError("Contact message was not found or has no customer email.", 404);
   }
 
-  const emailSubject = `Re: ${message.subject?.trim() || "Your message to PRELOVE SHOP"}`;
-  const emailText = [
-    `Hi ${message.name?.trim() || "there"},`,
-    "",
-    adminReply,
-    "",
-    "Original message:",
-    message.message || "",
-  ].join("\n");
-
-  if (canSendWithResend) {
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: resendFromEmail,
-        to: message.email,
-        subject: emailSubject,
-        text: emailText,
-      }),
-    });
-
-    const emailResult = (await emailResponse.json().catch(() => null)) as {
-      message?: string;
-      name?: string;
-      error?: string;
-    } | null;
-
-    if (!emailResponse.ok) {
-      const resendError =
-        emailResult?.message ||
-        emailResult?.error ||
-        emailResult?.name ||
-        `Resend API failed with status ${emailResponse.status}.`;
-      console.error("Contact reply email error:", emailResult);
-      return jsonError(resendError, 502);
-    }
-  } else {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: gmailUser,
-        pass: gmailAppPassword,
-      },
-    });
-
-    await transporter.sendMail({
-      from: `"PRELOVE SHOP" <${gmailUser}>`,
-      to: message.email,
-      subject: emailSubject,
-      text: emailText,
-    });
-  }
-
   const repliedAt = new Date().toISOString();
-
-  const { error: insertError } = await authClient.from("contact_message_replies").insert({
-    message_id: messageId,
-    admin_reply: adminReply,
-    replied_at: repliedAt,
-    replied_by: user.id,
-  });
-
-  if (insertError) {
-    console.error("Contact reply insert error:", insertError);
-  }
 
   const { error: updateError } = await authClient
     .from("contact_messages")
@@ -214,17 +139,100 @@ export async function POST(request: NextRequest) {
     console.error("Contact message update after reply error:", updateError);
     const { error: fallbackUpdateError } = await authClient
       .from("contact_messages")
-      .update({ is_read: true })
+      .update({
+        admin_reply: adminReply,
+        replied_at: repliedAt,
+      })
       .eq("id", messageId);
 
     if (fallbackUpdateError) {
-      return jsonError(updateError.message, 500);
+      return jsonError(fallbackUpdateError.message || updateError.message, 500);
     }
+  }
+
+  const { error: insertError } = await authClient.from("contact_message_replies").insert({
+    message_id: messageId,
+    admin_reply: adminReply,
+    replied_at: repliedAt,
+    replied_by: user.id,
+  });
+
+  if (insertError) {
+    console.error("Contact reply insert error:", insertError);
+  }
+
+  let emailWarning: string | null = null;
+
+  if (canSendWithResend || canSendWithGmail) {
+    const emailSubject = `Re: ${message.subject?.trim() || "Your message to PRELOVE SHOP"}`;
+    const emailText = [
+      `Hi ${message.name?.trim() || "there"},`,
+      "",
+      adminReply,
+      "",
+      "Original message:",
+      message.message || "",
+    ].join("\n");
+
+    try {
+      if (canSendWithResend) {
+        const emailResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: resendFromEmail,
+            to: message.email,
+            subject: emailSubject,
+            text: emailText,
+          }),
+        });
+
+        const emailResult = (await emailResponse.json().catch(() => null)) as {
+          message?: string;
+          name?: string;
+          error?: string;
+        } | null;
+
+        if (!emailResponse.ok) {
+          emailWarning =
+            emailResult?.message ||
+            emailResult?.error ||
+            emailResult?.name ||
+            `Resend API failed with status ${emailResponse.status}.`;
+          console.error("Contact reply email error:", emailResult);
+        }
+      } else {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: gmailUser,
+            pass: gmailAppPassword,
+          },
+        });
+
+        await transporter.sendMail({
+          from: `"PRELOVE SHOP" <${gmailUser}>`,
+          to: message.email,
+          subject: emailSubject,
+          text: emailText,
+        });
+      }
+    } catch (emailError) {
+      emailWarning = emailError instanceof Error ? emailError.message : "Reply email could not be sent.";
+      console.error("Contact reply email error:", emailError);
+    }
+  } else {
+    emailWarning =
+      "Email server is not configured, but the chat reply was saved. Add RESEND or Gmail environment variables if you also want email notifications.";
   }
 
   return NextResponse.json({
     ok: true,
     repliedAt,
     repliedBy: user.id,
+    emailWarning,
   });
 }

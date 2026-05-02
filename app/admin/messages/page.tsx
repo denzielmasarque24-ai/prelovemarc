@@ -237,6 +237,7 @@ export default function AdminMessagesPage() {
       );
       setReplyText('');
       setReplySuccess('Reply sent.');
+      await loadMessages();
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : 'Failed to send reply.';
       console.error('Failed to send contact message reply:', sendError);
