@@ -46,9 +46,14 @@ export default function CartPage() {
       return;
     }
 
-    const updatedCart = cartItems.map((item) =>
-      item.id === productId ? { ...item, quantity } : item,
-    );
+    const updatedCart = cartItems.map((item) => {
+      if (item.id !== productId) {
+        return item;
+      }
+
+      const availableStock = typeof item.stock === 'number' ? item.stock : null;
+      return { ...item, quantity: availableStock === null ? quantity : Math.min(quantity, Math.max(availableStock, 1)) };
+    });
 
     saveCart(updatedCart);
     setCartItems(updatedCart);
@@ -119,6 +124,7 @@ export default function CartPage() {
                       type="button"
                       className="qty-btn"
                       onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                      disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
                       aria-label={`Increase quantity of ${item.name}`}
                     >
                       +

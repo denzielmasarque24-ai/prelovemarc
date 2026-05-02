@@ -649,6 +649,15 @@
   width: 48px;
 }
 
+.admin-stock {
+  color: #2d6a4a;
+  font-weight: 700;
+}
+
+.admin-stock-empty {
+  color: #9b5a6f;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   .admin-shell {

@@ -60,6 +60,7 @@ function normalizeProductRow(row: ProductRow) {
     image,
     category,
     description,
+    stock: typeof row.stock === "number" ? row.stock : Number(row.stock ?? 0),
   } satisfies Product;
 }
 

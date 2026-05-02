@@ -29,6 +29,10 @@ end $$;
 
 alter table public.contact_messages add column if not exists id uuid default gen_random_uuid();
 alter table public.contact_messages add column if not exists is_read boolean not null default false;
+alter table public.contact_messages add column if not exists status text not null default 'new';
+alter table public.contact_messages add column if not exists admin_reply text;
+alter table public.contact_messages add column if not exists replied_at timestamptz;
+alter table public.contact_messages add column if not exists replied_by uuid references auth.users(id) on delete set null;
 alter table public.contact_messages add column if not exists created_at timestamptz not null default now();
 
 update public.contact_messages set id = gen_random_uuid() where id is null;
@@ -54,6 +58,20 @@ create table if not exists public.users (
 
 alter table public.users add column if not exists role text not null default 'user';
 
+create table if not exists public.contact_message_replies (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.contact_messages(id) on delete cascade,
+  admin_reply text not null,
+  replied_at timestamptz not null default now(),
+  replied_by uuid references auth.users(id) on delete set null
+);
+
+create index if not exists contact_message_replies_message_id_idx
+on public.contact_message_replies(message_id);
+
+create index if not exists contact_messages_status_idx
+on public.contact_messages(status);
+
 -- Keep existing app profiles usable while adding the requested users table.
 insert into public.users (id, role)
 select p.id, coalesce(nullif(p.role, ''), 'user')
@@ -63,9 +81,11 @@ on conflict (id) do update set role = excluded.role;
 
 -- Secure contact messages by default: anyone can send, only admins can read.
 alter table public.contact_messages enable row level security;
+alter table public.contact_message_replies enable row level security;
 
 grant insert on public.contact_messages to anon, authenticated;
 grant select, update on public.contact_messages to authenticated;
+grant select, insert, update on public.contact_message_replies to authenticated;
 revoke select on public.contact_messages from anon;
 
 drop policy if exists "Allow public contact message inserts" on public.contact_messages;
@@ -93,6 +113,28 @@ drop policy if exists "Allow admins to mark contact messages read" on public.con
 create policy "Allow admins to mark contact messages read"
 on public.contact_messages
 for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.users u
+    where u.id = auth.uid()
+      and u.role = 'admin'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.users u
+    where u.id = auth.uid()
+      and u.role = 'admin'
+  )
+);
+
+drop policy if exists "Allow admins to manage contact message replies" on public.contact_message_replies;
+create policy "Allow admins to manage contact message replies"
+on public.contact_message_replies
+for all
 to authenticated
 using (
   exists (

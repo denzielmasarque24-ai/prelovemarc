@@ -224,7 +224,7 @@ export async function hydrateCartFromSupabase() {
   const productIds = rows.map((row) => row.product_id);
   const { data: productRows, error: productsError } = await supabase
     .from("products")
-    .select("id, name, price, image, category, description")
+    .select("*")
     .in("id", productIds);
 
   if (productsError) {
@@ -232,7 +232,18 @@ export async function hydrateCartFromSupabase() {
     return localCart;
   }
 
-  const products = (productRows ?? []) as Product[];
+  const products = ((productRows ?? []) as Record<string, unknown>[]).map((row) => {
+    const image = readStringField(row, ["image", "image_url", "photo", "photo_url"]) ?? "";
+    const price = typeof row.price === "number" ? row.price : Number(row.price ?? 0);
+    const stock = typeof row.stock === "number" ? row.stock : Number(row.stock ?? NaN);
+
+    return {
+      ...row,
+      image,
+      price: Number.isFinite(price) ? price : 0,
+      stock: Number.isFinite(stock) ? stock : undefined,
+    } as Product;
+  });
   const productMap = new Map(products.map((product) => [product.id, product]));
   const cart = rows
     .map((row) => {
@@ -288,11 +299,18 @@ export function saveCart(cart: CartItem[]) {
 }
 
 export function addToCart(product: Product) {
+  const availableStock = typeof product.stock === "number" ? product.stock : null;
+
+  if (availableStock !== null && availableStock <= 0) {
+    return;
+  }
+
   const cart = getCart();
   const existingItem = cart.find((item) => item.id === product.id);
 
   if (existingItem) {
-    existingItem.quantity += 1;
+    existingItem.quantity =
+      availableStock === null ? existingItem.quantity + 1 : Math.min(existingItem.quantity + 1, availableStock);
   } else {
     cart.push({ ...product, quantity: 1 });
   }

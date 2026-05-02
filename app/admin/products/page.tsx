@@ -145,7 +145,11 @@ export default function AdminProductsPage() {
                   <td>{p.name}</td>
                   <td>{p.category}</td>
                   <td>{formatPrice(p.price)}</td>
-                  <td>{p.stock ?? '—'}</td>
+                  <td>
+                    <span className={`admin-stock ${Number(p.stock ?? 0) <= 0 ? 'admin-stock-empty' : ''}`}>
+                      {Number(p.stock ?? 0) <= 0 ? 'No Stock' : p.stock}
+                    </span>
+                  </td>
                   <td>
                     <span className={`status-badge ${p.status === 'active' ? 'status-delivered' : 'status-cancelled'}`}>
                       {p.status ?? 'active'}

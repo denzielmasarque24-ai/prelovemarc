@@ -106,7 +106,26 @@ create table if not exists public.contact_messages (
   subject text,
   message text not null,
   is_read boolean not null default false,
+  status text not null default 'new',
+  admin_reply text,
+  replied_at timestamptz,
+  replied_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
+);
+
+alter table public.contact_messages add column if not exists is_read boolean not null default false;
+alter table public.contact_messages add column if not exists status text not null default 'new';
+alter table public.contact_messages add column if not exists admin_reply text;
+alter table public.contact_messages add column if not exists replied_at timestamptz;
+alter table public.contact_messages add column if not exists replied_by uuid references auth.users(id) on delete set null;
+alter table public.contact_messages add column if not exists created_at timestamptz not null default now();
+
+create table if not exists public.contact_message_replies (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.contact_messages(id) on delete cascade,
+  admin_reply text not null,
+  replied_at timestamptz not null default now(),
+  replied_by uuid references auth.users(id) on delete set null
 );
 
 -- ===== DISABLE RLS FOR DEVELOPMENT =====
@@ -116,6 +135,7 @@ alter table public.orders disable row level security;
 alter table public.order_items disable row level security;
 alter table public.cart_items disable row level security;
 alter table public.contact_messages disable row level security;
+alter table public.contact_message_replies disable row level security;
 
 -- ===== RELOAD SCHEMA =====
 notify pgrst, 'reload schema';
