@@ -11,6 +11,7 @@ import {
   saveCart,
 } from '@/lib/storage';
 import { formatPrice } from '@/lib/format';
+import './cart.css';
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);

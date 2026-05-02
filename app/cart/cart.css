@@ -132,6 +132,11 @@
   color: #c293a3;
 }
 
+.qty-btn:disabled {
+  color: #e6cbd4;
+  cursor: not-allowed;
+}
+
 .qty-value {
   min-width: 30px;
   text-align: center;

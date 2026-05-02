@@ -83,7 +83,7 @@ on conflict (id) do update set role = excluded.role;
 alter table public.contact_messages enable row level security;
 alter table public.contact_message_replies enable row level security;
 
-grant insert on public.contact_messages to anon, authenticated;
+grant insert, select on public.contact_messages to anon, authenticated;
 grant select, update on public.contact_messages to authenticated;
 grant select, insert, update on public.contact_message_replies to authenticated;
 revoke select on public.contact_messages from anon;
@@ -108,6 +108,13 @@ using (
       and u.role = 'admin'
   )
 );
+
+drop policy if exists "Allow public contact message chat lookup" on public.contact_messages;
+create policy "Allow public contact message chat lookup"
+on public.contact_messages
+for select
+to anon
+using (true);
 
 drop policy if exists "Allow admins to mark contact messages read" on public.contact_messages;
 create policy "Allow admins to mark contact messages read"
