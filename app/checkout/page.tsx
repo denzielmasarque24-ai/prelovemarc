@@ -10,7 +10,7 @@ import "./checkout.css";
 import { formatPrice } from "@/lib/format";
 
 const deliveryFee = 50;
-const gcashNumber = "PUT_REAL_GCASH_NUMBER_HERE";
+const gcashNumber = "09914405837";
 const gcashQr = "/images/gcash.png";
 
 export default function CheckoutPage() {

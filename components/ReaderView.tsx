@@ -20,6 +20,7 @@ type ReaderMessage = {
 export default function ReaderView() {
   const [message, setMessage] = useState<ReaderMessage>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [expandedProductId, setExpandedProductId] = useState<ProductId | null>(null);
 
   useEffect(() => {
     const syncSessionState = () => {
@@ -65,6 +66,10 @@ export default function ReaderView() {
     addToCart(product);
     setMessage({ type: "success", text: `${product.name} has been added to your cart.` });
     window.setTimeout(() => setMessage(null), 1600);
+  };
+
+  const handleToggleDetails = (productId: ProductId) => {
+    setExpandedProductId((currentId) => (currentId === productId ? null : productId));
   };
 
   return (
@@ -135,11 +140,14 @@ export default function ReaderView() {
             {products.map((product) => (
               <ProductCard
                 key={product.id}
+                id={product.id}
                 image={product.image}
                 name={product.name}
                 price={product.price}
                 category={product.category}
                 description={product.description}
+                isDetailsOpen={expandedProductId === product.id}
+                onToggleDetails={handleToggleDetails}
                 onAddToCart={() => void handleAddToCart(product.id)}
               />
             ))}

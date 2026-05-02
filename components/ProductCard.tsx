@@ -2,15 +2,19 @@
 
 import { useId, useState } from "react";
 import { formatPrice } from "@/lib/format";
+import type { ProductId } from "@/lib/types";
 import "./ProductCard.css";
 
 interface ProductCardProps {
+  id: ProductId;
   image: string;
   name: string;
   price: number;
   category: string;
   description: string;
   stock?: number;
+  isDetailsOpen: boolean;
+  onToggleDetails: (productId: ProductId) => void;
   onAddToCart: () => void;
 }
 
@@ -24,14 +28,16 @@ function resolveImageSrc(raw: string): string {
 }
 
 export default function ProductCard({
+  id,
   image,
   name,
   price,
   description,
   stock,
+  isDetailsOpen,
+  onToggleDetails,
   onAddToCart,
 }: ProductCardProps) {
-  const [showDetails, setShowDetails] = useState(false);
   const [imgSrc, setImgSrc] = useState(() => resolveImageSrc(image));
   const detailsId = useId();
 
@@ -63,17 +69,17 @@ export default function ProductCard({
         <button
           type="button"
           className="product-details-toggle"
-          aria-expanded={showDetails}
+          aria-expanded={isDetailsOpen}
           aria-controls={detailsId}
-          onClick={() => setShowDetails((v) => !v)}
+          onClick={() => onToggleDetails(id)}
         >
-          {showDetails ? "Hide Details" : "View Details"}
+          {isDetailsOpen ? "Hide Details" : "View Details"}
         </button>
 
         <div
           id={detailsId}
-          className={`product-details${showDetails ? " open" : ""}`}
-          aria-hidden={!showDetails}
+          className={`product-details${isDetailsOpen ? " open" : ""}`}
+          aria-hidden={!isDetailsOpen}
         >
           {description.split("\n").map((line, i) => (
             <p key={`${detailsId}-${i}`}>{line || "\u00A0"}</p>
