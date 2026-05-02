@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 const RESEND_COOLDOWN = 60;
 
@@ -19,12 +20,11 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const cooldownRef = useRef<number | null>(null);
 
-  // Start resend cooldown on mount (OTP was just sent)
   useEffect(() => {
     inputRefs.current[0]?.focus();
     startCooldown();
     return () => { if (cooldownRef.current) window.clearInterval(cooldownRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function startCooldown() {
@@ -32,7 +32,11 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (cooldownRef.current) window.clearInterval(cooldownRef.current);
     cooldownRef.current = window.setInterval(() => {
       setResendCooldown((s) => {
-        if (s <= 1) { window.clearInterval(cooldownRef.current!); cooldownRef.current = null; return 0; }
+        if (s <= 1) {
+          window.clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
+        }
         return s - 1;
       });
     }, 1000);
@@ -69,22 +73,22 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     setError("");
     setSuccess("");
 
-    // Verify against our otp_codes table via API route
-    const res = await fetch('/api/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: pendingEmail, code: otpCode }),
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: pendingEmail,
+      token: otpCode,
+      type: "email",
     });
 
-    const resData = await res.json() as { error?: string };
-
-    if (!res.ok) {
+    if (verifyError) {
+      console.error("[OtpForm] verifyOtp error:", verifyError);
       setLoading(false);
-      setError(resData.error ?? 'Invalid or expired verification code. Please request a new one.');
+      setError(`${verifyError.message} — Please check the code and try again.`);
       return;
     }
 
-    // Code is valid — notify parent to switch to login tab
+    // Sign out the OTP session — user must log in manually
+    await supabase.auth.signOut();
+
     setLoading(false);
     onVerified(pendingEmail);
   }
@@ -94,15 +98,14 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     setError("");
     setSuccess("");
 
-    const res = await fetch('/api/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: pendingEmail }),
+    const { error: resendError } = await supabase.auth.signInWithOtp({
+      email: pendingEmail,
+      options: { shouldCreateUser: false },
     });
 
-    const resData = await res.json() as { error?: string };
-    if (!res.ok) {
-      setError(resData.error ?? 'Could not resend code. Please try again.');
+    if (resendError) {
+      console.error("[OtpForm] resend error:", resendError);
+      setError(`Could not resend code: ${resendError.message}`);
     } else {
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();

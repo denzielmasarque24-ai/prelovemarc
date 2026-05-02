@@ -136,16 +136,15 @@ export default function RegisterForm({ onClose, onSwitchToLogin, onDuplicateEmai
         { onConflict: "id" },
       );
 
-      // Step 4: Send OTP via Gmail API route
-      const otpRes = await fetch('/api/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail }),
+      // Step 4: Send OTP via Supabase — do NOT create a duplicate user
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { shouldCreateUser: false },
       });
 
-      if (!otpRes.ok) {
-        const otpData = await otpRes.json() as { error?: string };
-        setError(otpData.error ?? 'Failed to send verification code. Please try again.');
+      if (otpError) {
+        console.error('[RegisterForm] signInWithOtp error:', otpError);
+        setError(`Failed to send verification code: ${otpError.message}`);
         return;
       }
 
