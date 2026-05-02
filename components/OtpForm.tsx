@@ -12,43 +12,40 @@ type OtpFormProps = {
 };
 
 export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormProps) {
-  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const cooldownRef = useRef<number | null>(null);
+  const [digits, setDigits]           = useState(["", "", "", "", "", ""]);
+  const [error, setError]             = useState("");
+  const [success, setSuccess]         = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [resendCooldown, setResend]   = useState(RESEND_COOLDOWN);
+  const inputRefs  = useRef<(HTMLInputElement | null)[]>([]);
+  const timerRef   = useRef<number | null>(null);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
     startCooldown();
-    return () => { if (cooldownRef.current) window.clearInterval(cooldownRef.current); };
+    return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function startCooldown() {
-    setResendCooldown(RESEND_COOLDOWN);
-    if (cooldownRef.current) window.clearInterval(cooldownRef.current);
-    cooldownRef.current = window.setInterval(() => {
-      setResendCooldown((s) => {
-        if (s <= 1) { window.clearInterval(cooldownRef.current!); cooldownRef.current = null; return 0; }
+    setResend(RESEND_COOLDOWN);
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(() => {
+      setResend((s) => {
+        if (s <= 1) { window.clearInterval(timerRef.current!); timerRef.current = null; return 0; }
         return s - 1;
       });
     }, 1000);
   }
 
-  function handleChange(index: number, value: string) {
-    const digit = value.replace(/\D/g, "").slice(-1);
-    const next = [...digits];
-    next[index] = digit;
-    setDigits(next);
-    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
+  function handleChange(i: number, val: string) {
+    const digit = val.replace(/\D/g, "").slice(-1);
+    const next = [...digits]; next[i] = digit; setDigits(next);
+    if (digit && i < 5) inputRefs.current[i + 1]?.focus();
   }
 
-  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Backspace" && !digits[index] && index > 0)
-      inputRefs.current[index - 1]?.focus();
+  function handleKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !digits[i] && i > 0) inputRefs.current[i - 1]?.focus();
   }
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
@@ -56,23 +53,20 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (!pasted) return;
     const next = [...digits];
-    pasted.split("").forEach((char, i) => { next[i] = char; });
+    pasted.split("").forEach((c, i) => { next[i] = c; });
     setDigits(next);
     inputRefs.current[Math.min(pasted.length, 5)]?.focus();
   }
 
   async function handleVerify() {
-    const otpCode = digits.join("");
-    if (otpCode.length < 6) { setError("Please enter all 6 digits."); return; }
+    const token = digits.join("");
+    if (token.length < 6) { setError("Please enter all 6 digits."); return; }
 
-    setLoading(true);
-    setError("");
-    setSuccess("");
+    setLoading(true); setError(""); setSuccess("");
 
-    // Step 1: Verify OTP
-    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
       email: pendingEmail,
-      token: otpCode,
+      token,
       type: "email",
     });
 
@@ -83,34 +77,28 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       return;
     }
 
-    const userId = verifyData.user?.id;
+    const userId = data.user?.id;
 
-    // Step 2: Set password so user can log in with email+password later
-    const storedPassword = sessionStorage.getItem("pending_password") ?? "";
-    if (storedPassword) {
-      const { error: pwError } = await supabase.auth.updateUser({ password: storedPassword });
-      if (pwError) console.error("[OtpForm] updateUser password error:", pwError);
-    }
-
-    // Step 3: Save profile
+    // Save profile using data stored before OTP was sent
     if (userId) {
       const fullName = sessionStorage.getItem("pending_full_name") ?? "";
       const phone    = sessionStorage.getItem("pending_phone") ?? "";
-      const role     = sessionStorage.getItem("pending_role") ?? "user";
+      const email    = sessionStorage.getItem("pending_email") ?? pendingEmail;
+      const role     = email === "admin@gmail.com" ? "admin" : "user";
 
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        { id: userId, full_name: fullName, phone, role },
-        { onConflict: "id" },
-      );
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({ id: userId, full_name: fullName, phone, role }, { onConflict: "id" });
+
       if (profileError) console.error("[OtpForm] profile upsert error:", profileError);
     }
 
-    // Step 4: Clear stored data and sign out OTP session
-    sessionStorage.removeItem("pending_full_name");
-    sessionStorage.removeItem("pending_phone");
-    sessionStorage.removeItem("pending_password");
-    sessionStorage.removeItem("pending_role");
+    // Clear stored data
+    ["pending_full_name", "pending_phone", "pending_email"].forEach((k) =>
+      sessionStorage.removeItem(k)
+    );
 
+    // Sign out the OTP session — user must log in manually
     await supabase.auth.signOut();
 
     setLoading(false);
@@ -119,8 +107,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
 
   async function handleResend() {
     if (resendCooldown > 0) return;
-    setError("");
-    setSuccess("");
+    setError(""); setSuccess("");
 
     const { error: resendError } = await supabase.auth.signInWithOtp({
       email: pendingEmail,
@@ -141,8 +128,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
   return (
     <div className="otp-form">
       <p className="otp-hint">
-        Enter the 6-digit verification code sent to your Gmail{" "}
-        <strong>{pendingEmail}</strong>
+        Enter the 6-digit code sent to your Gmail <strong>{pendingEmail}</strong>
       </p>
 
       <div className="otp-inputs" role="group" aria-label="Verification code">
@@ -151,9 +137,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
             key={i}
             ref={(el) => { inputRefs.current[i] = el; }}
             className={`otp-box${digit ? " otp-box-filled" : ""}`}
-            type="text"
-            inputMode="numeric"
-            maxLength={1}
+            type="text" inputMode="numeric" maxLength={1}
             value={digit}
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
@@ -169,9 +153,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
       {success && <div className="auth-banner auth-banner-success">{success}</div>}
 
       <button type="button" className="auth-submit-btn" onClick={handleVerify} disabled={loading}>
-        {loading
-          ? <><span className="auth-spinner" aria-hidden="true" /> Verifying…</>
-          : "Verify Code"}
+        {loading ? <><span className="auth-spinner" aria-hidden="true" /> Verifying…</> : "Verify Code"}
       </button>
 
       <div className="otp-footer">
@@ -185,9 +167,7 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
         )}
       </div>
 
-      <button type="button" className="otp-back" onClick={onBack}>
-        ← Back to Register
-      </button>
+      <button type="button" className="otp-back" onClick={onBack}>← Back</button>
     </div>
   );
 }
