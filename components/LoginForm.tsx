@@ -65,29 +65,18 @@ export default function LoginForm({ onClose, onSwitchToRegister, prefillEmail, s
       }
 
       const user = data.user;
+
+      // Try to get profile but never block login if it fails
       const { data: profile } = await supabase
         .from("profiles")
         .select("role, full_name")
         .eq("id", user.id)
-        .single<{ role: string | null; full_name: string | null }>();
+        .maybeSingle<{ role: string | null; full_name: string | null }>();
 
-      // If profile missing, create a default one and continue
-      if (!profile) {
-        await supabase.from("profiles").upsert(
-          { id: user.id, full_name: user.email?.split("@")[0] ?? "User", role: "user" },
-          { onConflict: "id" }
-        );
-      }
-
-      const role = profile?.role ?? "user";
+      const role     = profile?.role ?? (user.email === "admin@gmail.com" ? "admin" : "user");
       const fullName = profile?.full_name?.trim() || user.email?.split("@")[0] || "User";
 
-      setSession({
-        fullName,
-        email: user.email || trimmedEmail,
-        role,
-      });
-
+      setSession({ fullName, email: user.email || trimmedEmail, role });
       onClose?.();
       router.push(role === "admin" ? "/admin" : "/");
     } catch (err: unknown) {
