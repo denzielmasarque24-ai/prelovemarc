@@ -5,6 +5,15 @@ import { supabase } from '@/lib/supabaseClient';
 import type { ContactMessage } from '@/lib/types';
 import './contact.css';
 
+type ChatUser = {
+  name: string;
+  email: string;
+};
+
+function getTimeValue(value?: string | null) {
+  return value ? new Date(value).getTime() : 0;
+}
+
 function formatChatTime(value?: string | null) {
   if (!value) return '';
 
@@ -14,120 +23,128 @@ function formatChatTime(value?: string | null) {
   });
 }
 
-function formatPreviewTime(value?: string | null) {
-  if (!value) return '';
-
-  return new Date(value).toLocaleTimeString('en-PH', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function getPreview(message: ContactMessage) {
-  return message.admin_reply?.trim() || message.message || 'No message preview';
+function fallbackName(email?: string | null) {
+  return email?.split('@')[0]?.trim() || 'Customer';
 }
 
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
-  const [chatEmail, setChatEmail] = useState('');
-  const [selectedId, setSelectedId] = useState('');
-  const [search, setSearch] = useState('');
+  const [chatUser, setChatUser] = useState<ChatUser | null>(null);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [messageText, setMessageText] = useState('');
+  const [loadingUser, setLoadingUser] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState('');
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
-  const formEmail = useMemo(() => form.email.trim().toLowerCase(), [form.email]);
+  const sortedMessages = useMemo(
+    () => [...messages].sort((a, b) => getTimeValue(a.created_at) - getTimeValue(b.created_at)),
+    [messages],
+  );
 
-  const filteredMessages = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return messages;
-
-    return messages.filter((message) =>
-      [message.subject, message.message, message.admin_reply]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [messages, search]);
-
-  const selected = useMemo(
-    () => messages.find((message) => message.id === selectedId) ?? filteredMessages[0] ?? null,
-    [filteredMessages, messages, selectedId],
+  const latestMessage = useMemo(
+    () => [...messages].sort((a, b) => getTimeValue(b.created_at) - getTimeValue(a.created_at))[0],
+    [messages],
   );
 
   const fetchMessages = async (email: string, showLoading = false) => {
-    if (!email) {
-      setMessages([]);
-      setMessageError('');
-      return;
-    }
-
     if (showLoading) setLoadingMessages(true);
 
     const { data, error: fetchError } = await supabase
       .from('contact_messages')
-      .select('id, name, email, subject, message, admin_reply, created_at, replied_at')
+      .select('id, name, email, subject, message, admin_reply, is_read, created_at, replied_at')
       .eq('email', email)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
 
     if (fetchError) {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('contact_messages')
         .select('id, name, email, subject, message, created_at')
         .eq('email', email)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (fallbackError) {
-        setMessageError('Unable to load your chats right now.');
+        setMessageError('Unable to load your chat right now.');
         setLoadingMessages(false);
         return;
       }
 
-      const fallbackMessages = (fallbackData ?? []) as ContactMessage[];
-      setMessages(fallbackMessages);
-      if (!selectedId && fallbackMessages[0]) setSelectedId(fallbackMessages[0].id);
+      setMessages((fallbackData ?? []) as ContactMessage[]);
       setMessageError('');
       setLoadingMessages(false);
       return;
     }
 
-    const nextMessages = (data ?? []) as ContactMessage[];
-    setMessages(nextMessages);
-    if (!selectedId && nextMessages[0]) setSelectedId(nextMessages[0].id);
+    setMessages((data ?? []) as ContactMessage[]);
     setMessageError('');
     setLoadingMessages(false);
   };
 
   useEffect(() => {
-    if (!formEmail) return;
+    let isMounted = true;
 
-    const timeout = window.setTimeout(() => {
-      setChatEmail(formEmail);
-    }, 500);
+    const loadUser = async () => {
+      setLoadingUser(true);
 
-    return () => window.clearTimeout(timeout);
-  }, [formEmail]);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!isMounted) return;
+
+      if (!session?.user?.email) {
+        setChatUser(null);
+        setLoadingUser(false);
+        return;
+      }
+
+      const email = session.user.email.trim().toLowerCase();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', session.user.id)
+        .maybeSingle<{ full_name: string | null }>();
+
+      const user = {
+        email,
+        name: profile?.full_name?.trim() || fallbackName(email),
+      };
+
+      setChatUser(user);
+      setLoadingUser(false);
+      void fetchMessages(user.email, true);
+    };
+
+    void loadUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!chatEmail) return;
+    if (!chatUser?.email) return;
 
-    void fetchMessages(chatEmail, true);
     const interval = window.setInterval(() => {
-      void fetchMessages(chatEmail);
+      void fetchMessages(chatUser.email);
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [chatEmail]);
+  }, [chatUser?.email]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
-      setError('Please enter your name, email, and message.');
+    if (!chatUser?.email) {
+      setError('Please log in to send a message.');
+      setSuccess('');
+      return;
+    }
+
+    const trimmedMessage = messageText.trim();
+    if (!trimmedMessage) {
+      setError('Please type a message.');
       setSuccess('');
       return;
     }
@@ -136,26 +153,23 @@ export default function ContactPage() {
     setError('');
     setSuccess('');
 
-    const submittedEmail = form.email.trim().toLowerCase();
     const now = new Date().toISOString();
     const optimisticMessage: ContactMessage = {
       id: crypto.randomUUID(),
-      name: form.name.trim(),
-      email: submittedEmail,
-      subject: form.subject.trim() || null,
-      message: form.message.trim(),
+      name: chatUser.name,
+      email: chatUser.email,
+      subject: null,
+      message: trimmedMessage,
       created_at: now,
     };
 
-    setChatEmail(submittedEmail);
-    setSelectedId(optimisticMessage.id);
-    setMessages((current) => [optimisticMessage, ...current]);
+    setMessages((current) => [...current, optimisticMessage]);
 
     const { error: dbError } = await supabase.from('contact_messages').insert({
-      name: optimisticMessage.name,
-      email: submittedEmail,
-      subject: optimisticMessage.subject,
-      message: optimisticMessage.message,
+      name: chatUser.name,
+      email: chatUser.email,
+      subject: null,
+      message: trimmedMessage,
     });
 
     setSending(false);
@@ -167,155 +181,93 @@ export default function ContactPage() {
     }
 
     setSuccess('Message sent.');
-    setForm((current) => ({ ...current, message: '' }));
-    await fetchMessages(submittedEmail);
+    setMessageText('');
+    await fetchMessages(chatUser.email);
   };
 
   return (
     <main className="contact-main">
-      <section className="messenger-shell" aria-label="PRELOVE SHOP customer chats">
-        <aside className="user-chat-sidebar">
-          <div className="user-chat-head">
-            <h1>Chats</h1>
-            <span>{messages.length}</span>
+      <section className="chat-widget" aria-label="PRELOVE SHOP customer chat">
+        <header className="chat-widget-header">
+          <div className="chat-widget-avatar-wrap">
+            <img src="/images/logo.png" alt="PRELOVE SHOP logo" className="chat-widget-avatar" />
+            <span className="chat-widget-online" aria-hidden="true" />
           </div>
-
-          <div className="user-chat-identity">
-            <label>
-              Name
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="Your name"
-                required
-              />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-                placeholder="you@example.com"
-                required
-              />
-            </label>
-            <label>
-              Subject
-              <input
-                value={form.subject}
-                onChange={(event) => setForm({ ...form, subject: event.target.value })}
-                placeholder="Optional"
-              />
-            </label>
+          <div>
+            <h1>PRELOVE SHOP</h1>
+            <p>We typically reply within a few hours</p>
           </div>
+        </header>
 
-          <input
-            className="user-chat-search"
-            placeholder="Search messages"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-
-          <div className="user-chat-list">
-            {!chatEmail ? (
-              <p className="chat-empty">Enter your email to load your chats.</p>
+        <form className="chat-widget-form" onSubmit={handleSubmit}>
+          <div className="chat-widget-body" aria-live="polite">
+            {loadingUser ? (
+              <p className="chat-widget-empty">Loading your account...</p>
+            ) : !chatUser ? (
+              <p className="chat-widget-empty">Please log in to send us a message.</p>
             ) : loadingMessages ? (
-              <p className="chat-empty">Loading chats...</p>
+              <p className="chat-widget-empty">Loading conversation...</p>
             ) : messageError ? (
-              <p className="chat-empty">{messageError}</p>
-            ) : filteredMessages.length ? (
-              filteredMessages.map((message) => {
-                const active = selected?.id === message.id;
+              <p className="chat-widget-empty">{messageError}</p>
+            ) : sortedMessages.length ? (
+              <>
+                <div className="chat-widget-date">{formatChatTime(latestMessage?.created_at)}</div>
+                {sortedMessages.map((message) => (
+                  <div key={message.id} className="chat-widget-thread">
+                    <div className="chat-widget-row user">
+                      <div className="chat-widget-bubble user">
+                        <span>You</span>
+                        <p>{message.message}</p>
+                      </div>
+                      <time>{formatChatTime(message.created_at)}</time>
+                    </div>
 
-                return (
-                  <button
-                    key={message.id}
-                    type="button"
-                    className={`user-chat-item${active ? ' active' : ''}`}
-                    onClick={() => setSelectedId(message.id)}
-                  >
-                    <span className="user-chat-avatar">P</span>
-                    <span className="user-chat-summary">
-                      <span className="user-chat-name-row">
-                        <strong>PRELOVE SHOP</strong>
-                        <time>{formatPreviewTime(message.replied_at || message.created_at)}</time>
-                      </span>
-                      <span className="user-chat-preview">{getPreview(message)}</span>
-                    </span>
-                    {!message.admin_reply ? <span className="user-unread-dot" aria-label="Waiting for admin reply" /> : null}
-                  </button>
-                );
-              })
+                    {message.admin_reply ? (
+                      <div className="chat-widget-row admin">
+                        <div className="chat-widget-bubble admin">
+                          <span>PRELOVE SHOP</span>
+                          <p>{message.admin_reply}</p>
+                        </div>
+                        <time>{formatChatTime(message.replied_at)}</time>
+                      </div>
+                    ) : (
+                      <p className="chat-widget-waiting">Waiting for admin reply...</p>
+                    )}
+                  </div>
+                ))}
+              </>
             ) : (
-              <p className="chat-empty">No chats yet.</p>
+              <div className="chat-widget-welcome">
+                <span>Hi, {chatUser.name}!</span>
+                <p>Send us a message and we will reply here.</p>
+              </div>
             )}
           </div>
-        </aside>
 
-        <section className="messenger-panel">
-          <header className="messenger-header">
-            <div className="mini-avatar">
-              <img src="/images/logo.png" alt="" />
-            </div>
-            <div>
-              <h2>PRELOVE SHOP</h2>
-              <p>{chatEmail || 'Online now'}</p>
-            </div>
-          </header>
-
-          <form className="messenger-form user-messenger-form" onSubmit={handleSubmit}>
+          <div className="chat-widget-composer">
             {(success || error) && (
-              <div className={error ? 'chat-alert error' : 'chat-alert success'}>
+              <div className={error ? 'chat-widget-alert error' : 'chat-widget-alert success'}>
                 {error || success}
               </div>
             )}
-
-            <div className="messenger-body" aria-live="polite">
-              {!selected ? (
-                <p className="chat-empty">Select a chat or send a new message below.</p>
-              ) : (
-                <div className="chat-thread">
-                  <div className="chat-date-badge">{formatChatTime(selected.created_at)}</div>
-
-                  <div className="message-row message-row-user">
-                    <div className="message-bubble user-bubble">
-                      <span className="sender-label">You</span>
-                      {selected.subject ? <strong>{selected.subject}</strong> : null}
-                      <p>{selected.message}</p>
-                    </div>
-                    <time>{formatChatTime(selected.created_at)}</time>
-                  </div>
-
-                  {selected.admin_reply ? (
-                    <div className="message-row message-row-admin">
-                      <div className="message-bubble admin-bubble">
-                        <span className="sender-label">Admin</span>
-                        <p>{selected.admin_reply}</p>
-                      </div>
-                      <time>{formatChatTime(selected.replied_at)}</time>
-                    </div>
-                  ) : (
-                    <p className="waiting-reply">Waiting for admin reply...</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="messenger-composer">
+            <div className="chat-widget-input-row">
               <textarea
                 rows={1}
-                value={form.message}
-                onChange={(event) => setForm({ ...form, message: event.target.value })}
                 placeholder="Type a message..."
-                required
+                value={messageText}
+                onChange={(event) => {
+                  setMessageText(event.target.value);
+                  setError('');
+                  setSuccess('');
+                }}
+                disabled={sending || !chatUser}
               />
-              <button type="submit" disabled={sending} aria-label="Send message">
+              <button type="submit" disabled={sending || !chatUser} aria-label="Send message">
                 {sending ? '...' : 'Send'}
               </button>
             </div>
-          </form>
-        </section>
+          </div>
+        </form>
       </section>
     </main>
   );
