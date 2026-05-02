@@ -55,16 +55,19 @@ export default function RegisterForm({ onSwitchToLogin, onOtpSent }: RegisterFor
     sessionStorage.setItem("pending_phone", phone.trim());
     sessionStorage.setItem("pending_email", normalizedEmail);
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: { shouldCreateUser: true },
+    // Send OTP via Gmail — bypasses Supabase email limits
+    const res = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: normalizedEmail }),
     });
 
     setSending(false);
 
-    if (otpError) {
-      console.error("[RegisterForm] signInWithOtp error:", otpError);
-      setError(otpError.message);
+    const resData = await res.json() as { error?: string };
+    if (!res.ok) {
+      console.error('[RegisterForm] send-otp error:', resData.error);
+      setError(resData.error ?? 'Failed to send verification code.');
       return;
     }
 

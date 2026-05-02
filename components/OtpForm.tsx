@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 const RESEND_COOLDOWN = 60;
+const ADMIN_EMAIL = "admin@gmail.com";
 
 type OtpFormProps = {
   pendingEmail: string;
@@ -12,13 +13,13 @@ type OtpFormProps = {
 };
 
 export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormProps) {
-  const [digits, setDigits]           = useState(["", "", "", "", "", ""]);
-  const [error, setError]             = useState("");
-  const [success, setSuccess]         = useState("");
-  const [loading, setLoading]         = useState(false);
-  const [resendCooldown, setResend]   = useState(RESEND_COOLDOWN);
-  const inputRefs  = useRef<(HTMLInputElement | null)[]>([]);
-  const timerRef   = useRef<number | null>(null);
+  const [digits, setDigits]         = useState(["", "", "", "", "", ""]);
+  const [error, setError]           = useState("");
+  const [success, setSuccess]       = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [resendCooldown, setResend] = useState(RESEND_COOLDOWN);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const timerRef  = useRef<number | null>(null);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
@@ -59,46 +60,62 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
   }
 
   async function handleVerify() {
-    const token = digits.join("");
-    if (token.length < 6) { setError("Please enter all 6 digits."); return; }
+    const code = digits.join("");
+    if (code.length < 6) { setError("Please enter all 6 digits."); return; }
 
     setLoading(true); setError(""); setSuccess("");
 
-    const { data, error: verifyError } = await supabase.auth.verifyOtp({
-      email: pendingEmail,
-      token,
-      type: "email",
+    // Step 1: Verify code against otp_codes table
+    const res = await fetch("/api/verify-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: pendingEmail, code }),
     });
 
-    if (verifyError) {
-      console.error("[OtpForm] verifyOtp error:", verifyError);
+    const resData = await res.json() as { error?: string };
+
+    if (!res.ok) {
+      console.error("[OtpForm] verify-otp error:", resData.error);
       setLoading(false);
-      setError(verifyError.message);
+      setError(resData.error ?? "Invalid or expired code. Please try again.");
       return;
     }
 
-    const userId = data.user?.id;
+    // Step 2: Create Supabase auth user now that email is verified
+    const fullName = sessionStorage.getItem("pending_full_name") ?? "";
+    const phone    = sessionStorage.getItem("pending_phone") ?? "";
+    const role     = pendingEmail === ADMIN_EMAIL ? "admin" : "user";
 
-    // Save profile using data stored before OTP was sent
+    // Use a random password — user will log in via OTP or can set password later
+    const tempPassword = crypto.randomUUID();
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: pendingEmail,
+      password: tempPassword,
+    });
+
+    if (signUpError && !signUpError.message.toLowerCase().includes("already registered")) {
+      console.error("[OtpForm] signUp error:", signUpError);
+      setLoading(false);
+      setError(signUpError.message);
+      return;
+    }
+
+    const userId = signUpData?.user?.id;
+
+    // Step 3: Save profile
     if (userId) {
-      const fullName = sessionStorage.getItem("pending_full_name") ?? "";
-      const phone    = sessionStorage.getItem("pending_phone") ?? "";
-      const email    = sessionStorage.getItem("pending_email") ?? pendingEmail;
-      const role     = email === "admin@gmail.com" ? "admin" : "user";
-
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({ id: userId, full_name: fullName, phone, role }, { onConflict: "id" });
-
       if (profileError) console.error("[OtpForm] profile upsert error:", profileError);
     }
 
-    // Clear stored data
+    // Step 4: Clean up
     ["pending_full_name", "pending_phone", "pending_email"].forEach((k) =>
       sessionStorage.removeItem(k)
     );
 
-    // Sign out the OTP session — user must log in manually
     await supabase.auth.signOut();
 
     setLoading(false);
@@ -109,14 +126,15 @@ export default function OtpForm({ pendingEmail, onVerified, onBack }: OtpFormPro
     if (resendCooldown > 0) return;
     setError(""); setSuccess("");
 
-    const { error: resendError } = await supabase.auth.signInWithOtp({
-      email: pendingEmail,
-      options: { shouldCreateUser: false },
+    const res = await fetch("/api/send-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: pendingEmail }),
     });
 
-    if (resendError) {
-      console.error("[OtpForm] resend error:", resendError);
-      setError(resendError.message);
+    const resData = await res.json() as { error?: string };
+    if (!res.ok) {
+      setError(resData.error ?? "Could not resend code. Please try again.");
     } else {
       setDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
