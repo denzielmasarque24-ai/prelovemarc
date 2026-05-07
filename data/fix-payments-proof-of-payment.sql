@@ -29,6 +29,13 @@ alter table public.payments add column if not exists reference_number text;
 alter table public.payments add column if not exists created_at timestamptz not null default now();
 
 update public.payments p
+set user_id = o.user_id
+from public.orders o
+where p.order_id = o.id
+  and p.user_id is null
+  and o.user_id is not null;
+
+update public.payments p
 set proof_of_payment = o.payment_proof
 from public.orders o
 where p.order_id = o.id

@@ -223,7 +223,11 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<str
 
   if (sessionError) throw new Error(sessionError.message);
 
-  const userId = session?.user?.id ?? null;
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    throw new Error("Please log in before placing an order.");
+  }
 
   const { error: orderError } = await supabase.from("orders").insert({
     id: orderId,

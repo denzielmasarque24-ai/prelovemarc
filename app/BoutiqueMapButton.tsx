@@ -4,12 +4,16 @@ import { useEffect, useState } from "react";
 import styles from "./page.module.css";
 
 const mapQuery = "Pardo New State, Cebu City, Philippines";
+const mapQueryParam = "Pardo+New+State+Cebu+City+Philippines";
 const encodedMapQuery = encodeURIComponent(mapQuery);
-const mapEmbedUrl = `https://maps.google.com/maps?q=${encodedMapQuery}&z=18&iwloc=B&output=embed`;
+const pardoNewStateCoordinates = "10.27939,123.85546";
+const mapEmbedUrl = `https://www.google.com/maps?q=${mapQueryParam}&ll=${pardoNewStateCoordinates}&z=18&output=embed`;
 const mapOpenUrl = `https://www.google.com/maps/search/?api=1&query=${encodedMapQuery}`;
 
 export default function BoutiqueMapButton() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [showMapFallback, setShowMapFallback] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -27,6 +31,19 @@ export default function BoutiqueMapButton() {
       document.body.classList.remove("boutique-map-open");
       window.removeEventListener("keydown", handleKeyDown);
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setIsMapLoaded(false);
+    setShowMapFallback(false);
+
+    const fallbackTimer = window.setTimeout(() => {
+      setShowMapFallback(true);
+    }, 8000);
+
+    return () => window.clearTimeout(fallbackTimer);
   }, [isOpen]);
 
   return (
@@ -55,6 +72,18 @@ export default function BoutiqueMapButton() {
             </div>
 
             <div className={styles.mapFrameWrap}>
+              <div className={styles.mapPin} aria-hidden="true" />
+              {!isMapLoaded && (
+                <div className={styles.mapLoadingPanel}>
+                  <strong>Loading map...</strong>
+                  <span>Pardo New State, Cebu City, Philippines</span>
+                  {showMapFallback && (
+                    <a href={mapOpenUrl} target="_blank" rel="noreferrer">
+                      Open the pinned location in Google Maps
+                    </a>
+                  )}
+                </div>
+              )}
               <iframe
                 title="PRELOVE SHOP location in Pardo New State, Cebu City"
                 src={mapEmbedUrl}
@@ -62,6 +91,10 @@ export default function BoutiqueMapButton() {
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
                 allowFullScreen
+                onLoad={() => {
+                  setIsMapLoaded(true);
+                  setShowMapFallback(false);
+                }}
               />
             </div>
 

@@ -305,16 +305,79 @@
   background: #fdecef;
   border: 1px solid rgba(243, 198, 207, 0.9);
   border-radius: 20px;
+  height: 420px;
   min-height: 420px;
   overflow: hidden;
+  position: relative;
   width: 100%;
 }
 
 .mapFrame {
   border: 0;
   display: block;
-  height: 420px;
+  height: 100%;
   width: 100%;
+}
+
+.mapPin {
+  background: #e53935;
+  border: 3px solid #ffffff;
+  border-radius: 999px 999px 999px 0;
+  box-shadow: 0 8px 18px rgba(74, 59, 63, 0.32);
+  height: 28px;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -92%) rotate(-45deg);
+  width: 28px;
+  z-index: 2;
+}
+
+.mapPin::after {
+  background: #ffffff;
+  border-radius: 50%;
+  content: "";
+  height: 8px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+}
+
+.mapLoadingPanel {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 252, 0.96), rgba(253, 236, 239, 0.96));
+  color: #7a6a6f;
+  display: grid;
+  gap: 8px;
+  inset: 0;
+  justify-items: center;
+  padding: 24px;
+  position: absolute;
+  text-align: center;
+  z-index: 1;
+}
+
+.mapLoadingPanel strong {
+  color: #4a3b3f;
+  font-size: 1rem;
+}
+
+.mapLoadingPanel span {
+  font-size: 0.9rem;
+}
+
+.mapLoadingPanel a {
+  background: #ffffff;
+  border: 1px solid rgba(217, 143, 174, 0.36);
+  border-radius: 999px;
+  color: #c9789d;
+  font-weight: 800;
+  margin-top: 4px;
+  padding: 0.65rem 1rem;
 }
 
 .mapOpenButton {
@@ -483,11 +546,12 @@
   }
 
   .mapFrameWrap {
+    height: 320px;
     min-height: 320px;
   }
 
   .mapFrame {
-    height: 320px;
+    height: 100%;
   }
 
   .mapOpenButton {
