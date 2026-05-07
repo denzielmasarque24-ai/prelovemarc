@@ -4,6 +4,7 @@ export const orderStatuses: OrderStatus[] = [
   "pending",
   "in_progress",
   "completed",
+  "delivered",
   "cancelled",
 ];
 
@@ -11,6 +12,7 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
   pending: "Pending",
   in_progress: "In Progress",
   completed: "Completed",
+  delivered: "Delivered",
   cancelled: "Cancelled",
 };
 
@@ -27,8 +29,9 @@ export function normalizeOrderStatus(value: string): OrderStatus {
       return "in_progress";
     case "completed":
     case "paid":
-    case "delivered":
       return "completed";
+    case "delivered":
+      return "delivered";
     case "cancelled":
     case "canceled":
       return "cancelled";
@@ -43,4 +46,9 @@ export function getOrderStatusLabel(status: string) {
 
 export function getOrderStatusClass(status: string) {
   return `status-${normalizeOrderStatus(status)}`;
+}
+
+export function isFulfilledOrderStatus(status: string) {
+  const normalized = normalizeOrderStatus(status);
+  return normalized === "completed" || normalized === "delivered";
 }

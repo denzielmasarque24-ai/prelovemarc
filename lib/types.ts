@@ -4,6 +4,7 @@ export type OrderStatus =
   | "pending"
   | "in_progress"
   | "completed"
+  | "delivered"
   | "cancelled";
 
 export interface Product {
@@ -58,6 +59,7 @@ export interface Order {
   delivery_option: string;
   total: number;
   status: OrderStatus;
+  stock_deducted?: boolean;
   reference_number?: string | null;
   payment_proof?: string | null;
   created_at?: string;
@@ -67,6 +69,7 @@ export interface Order {
 export interface OrderItem {
   id: string;
   order_id: string;
+  product_id?: string | null;
   product_name: string;
   price: number;
   quantity: number;

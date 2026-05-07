@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { formatPrice } from '@/lib/format';
-import { getOrderStatusClass, getOrderStatusLabel, normalizeOrderStatus } from '@/lib/orderStatus';
+import { getOrderStatusClass, getOrderStatusLabel, isFulfilledOrderStatus, normalizeOrderStatus } from '@/lib/orderStatus';
 import type { Payment } from '@/lib/types';
 
 export default function AdminPaymentsPage() {
@@ -84,7 +84,7 @@ export default function AdminPaymentsPage() {
           customer_name: o.customer_name,
           payment_method: o.payment_method,
           amount: o.total,
-          payment_status: normalizeOrderStatus(o.status) === 'completed' ? 'completed' : 'pending',
+          payment_status: isFulfilledOrderStatus(o.status) ? 'completed' : 'pending',
           proof_of_payment: o.payment_proof,
           reference_number: o.reference_number,
           created_at: o.created_at,
@@ -102,7 +102,7 @@ export default function AdminPaymentsPage() {
   }, []);
 
   const summary = useMemo(() => {
-    const completed = payments.filter((p) => normalizeOrderStatus(p.payment_status) === 'completed');
+    const completed = payments.filter((p) => isFulfilledOrderStatus(p.payment_status));
     const cod = payments.filter((p) => p.payment_method === 'cod');
     const pending = payments.filter((p) => normalizeOrderStatus(p.payment_status) === 'pending');
 

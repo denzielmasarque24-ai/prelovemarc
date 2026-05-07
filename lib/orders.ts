@@ -27,7 +27,7 @@ export interface CheckoutOrderInput {
 function isUuid(value: ProductId): value is string {
   return (
     typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
   );
 }
 
@@ -36,6 +36,11 @@ function getDatabaseCartItems(items: CartItem[]) {
 
   for (const item of items) {
     if (!isUuid(item.id)) {
+      console.error("Stock deduction skipped cart item with non-database product id:", {
+        productId: item.id,
+        productName: item.name,
+        orderedQuantity: item.quantity,
+      });
       continue;
     }
 
@@ -94,53 +99,6 @@ function assertStockAvailable(
       throw new Error(`Only ${product.stock} ${product.name} left in stock.`);
     }
   }
-}
-
-async function reduceProductStock(
-  items: ReturnType<typeof getDatabaseCartItems>,
-  stockById: Map<string, { stock: number; name: string }>,
-) {
-  const reducedItems: { id: string; stock: number }[] = [];
-
-  try {
-    for (const item of items) {
-      const product = stockById.get(item.id);
-      if (!product) continue;
-
-      const nextStock = product.stock - item.quantity;
-      const { data, error } = await supabase
-        .from("products")
-        .update({ stock: nextStock })
-        .eq("id", item.id)
-        .eq("stock", product.stock)
-        .select("id")
-        .maybeSingle();
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (!data) {
-        throw new Error(`${product.name} stock changed while placing your order. Please review your cart and try again.`);
-      }
-
-      reducedItems.push({ id: item.id, stock: product.stock });
-    }
-  } catch (error) {
-    for (const item of reducedItems) {
-      await supabase.from("products").update({ stock: item.stock }).eq("id", item.id);
-    }
-
-    throw error;
-  }
-}
-
-function notifyProductStockChanged() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.dispatchEvent(new Event("product-stock-updated"));
 }
 
 async function removeSavedOrder(orderId: string) {
@@ -213,6 +171,11 @@ async function insertPaymentRecord(input: {
 export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<string> {
   const orderId = crypto.randomUUID();
   const databaseItems = getDatabaseCartItems(input.items);
+
+  if (!databaseItems.length) {
+    throw new Error("Unable to match cart items to product records. Please refresh your cart and try again.");
+  }
+
   const liveStockById = await getLiveStock(databaseItems);
   assertStockAvailable(databaseItems, liveStockById);
 
@@ -252,6 +215,7 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<str
 
   const orderItems = input.items.map((item) => ({
     order_id: orderId,
+    product_id: isUuid(item.id) ? item.id : null,
     product_name: item.name,
     price: item.price,
     quantity: item.quantity,
@@ -279,14 +243,6 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<str
   } catch (paymentError) {
     await removeSavedOrder(orderId);
     throw paymentError;
-  }
-
-  try {
-    await reduceProductStock(databaseItems, liveStockById);
-    notifyProductStockChanged();
-  } catch (stockError) {
-    await removeSavedOrder(orderId);
-    throw stockError;
   }
 
   return orderId;

@@ -64,6 +64,7 @@ create table if not exists public.orders (
   delivery_option text not null default 'pickup',
   total integer not null check (total >= 0),
   status text not null default 'pending',
+  stock_deducted boolean not null default false,
   reference_number text,
   payment_proof text,
   created_at timestamptz not null default now()
@@ -78,15 +79,19 @@ alter table public.orders add column if not exists payment_method text;
 alter table public.orders add column if not exists notes text;
 alter table public.orders add column if not exists reference_number text;
 alter table public.orders add column if not exists payment_proof text;
+alter table public.orders add column if not exists stock_deducted boolean not null default false;
 
 -- ===== ORDER ITEMS TABLE =====
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
+  product_id uuid references public.products(id) on delete set null,
   product_name text not null,
   price integer not null check (price >= 0),
   quantity integer not null check (quantity > 0)
 );
+
+alter table public.order_items add column if not exists product_id uuid references public.products(id) on delete set null;
 
 -- ===== PAYMENTS TABLE =====
 create table if not exists public.payments (

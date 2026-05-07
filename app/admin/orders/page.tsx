@@ -23,9 +23,10 @@ export default function AdminOrdersPage() {
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
     try {
-      await adminUpdateOrderStatus(orderId, status);
-      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
-      if (selected?.id === orderId) setSelected((prev) => prev ? { ...prev, status } : prev);
+      setError('');
+      const updatedOrder = await adminUpdateOrderStatus(orderId, status);
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, ...updatedOrder } : o));
+      if (selected?.id === orderId) setSelected((prev) => prev ? { ...prev, ...updatedOrder } : prev);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Update failed');
     }

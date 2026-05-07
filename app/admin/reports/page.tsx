@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { adminGetAllOrders } from '@/lib/admin';
-import { getOrderStatusClass, getOrderStatusLabel, normalizeOrderStatus } from '@/lib/orderStatus';
+import { getOrderStatusClass, getOrderStatusLabel, isFulfilledOrderStatus, normalizeOrderStatus } from '@/lib/orderStatus';
 import { formatPrice } from '@/lib/format';
 import type { Order } from '@/lib/types';
 
@@ -16,7 +16,7 @@ export default function AdminReportsPage() {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
 
-  const completed = orders.filter((o) => normalizeOrderStatus(o.status) === 'completed');
+  const completed = orders.filter((o) => isFulfilledOrderStatus(o.status));
   const totalRevenue = completed.reduce((s, o) => s + o.total, 0);
   const pending = orders.filter((o) => normalizeOrderStatus(o.status) === 'pending').length;
   const cancelled = orders.filter((o) => normalizeOrderStatus(o.status) === 'cancelled').length;

@@ -36,9 +36,6 @@ export default function BoutiqueMapButton() {
   useEffect(() => {
     if (!isOpen) return;
 
-    setIsMapLoaded(false);
-    setShowMapFallback(false);
-
     const fallbackTimer = window.setTimeout(() => {
       setShowMapFallback(true);
     }, 8000);
@@ -48,7 +45,15 @@ export default function BoutiqueMapButton() {
 
   return (
     <>
-      <button type="button" className={styles.primaryButton} onClick={() => setIsOpen(true)}>
+      <button
+        type="button"
+        className={styles.primaryButton}
+        onClick={() => {
+          setIsMapLoaded(false);
+          setShowMapFallback(false);
+          setIsOpen(true);
+        }}
+      >
         Visit the Boutique
       </button>
 

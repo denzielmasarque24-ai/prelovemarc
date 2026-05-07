@@ -94,12 +94,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="admin-quick-links" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <Link href="/admin/products" className="admin-btn admin-btn-primary">+ Add Product</Link>
-        <Link href="/admin/orders" className="admin-btn admin-btn-outline">Manage Orders</Link>
-        <Link href="/admin/payments" className="admin-btn admin-btn-outline">View Payments</Link>
-        <Link href="/admin/messages" className="admin-btn admin-btn-outline">View Messages</Link>
-      </div>
     </>
   );
 }

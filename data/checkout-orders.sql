@@ -20,6 +20,7 @@ create table if not exists public.orders (
   delivery_option text        not null default 'pickup',
   total           integer     not null default 0 check (total >= 0),
   status          text        not null default 'pending',
+  stock_deducted  boolean     not null default false,
   reference_number text,
   payment_proof   text,
   created_at      timestamptz not null default now()
@@ -35,6 +36,7 @@ alter table public.orders add column if not exists reference_number text;
 alter table public.orders add column if not exists payment_proof    text;
 alter table public.orders add column if not exists delivery_option  text not null default 'pickup';
 alter table public.orders add column if not exists payment_method   text not null default 'cod';
+alter table public.orders add column if not exists stock_deducted   boolean not null default false;
 
 -- 3. Fix NULL delivery_option values from old rows
 update public.orders
@@ -58,10 +60,13 @@ alter table public.orders
 create table if not exists public.order_items (
   id           uuid    primary key default gen_random_uuid(),
   order_id     uuid    not null references public.orders(id) on delete cascade,
+  product_id   uuid    references public.products(id) on delete set null,
   product_name text    not null,
   price        integer not null check (price >= 0),
   quantity     integer not null check (quantity > 0)
 );
+
+alter table public.order_items add column if not exists product_id uuid references public.products(id) on delete set null;
 
 -- 7. Disable RLS for development
 alter table public.orders      disable row level security;

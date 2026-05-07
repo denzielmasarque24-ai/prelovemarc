@@ -18,7 +18,8 @@ update public.orders
 set status = case
   when lower(trim(status)) in ('pending') then 'pending'
   when lower(trim(status)) in ('in_progress', 'in progress', 'confirmed', 'preparing', 'out_for_delivery', 'out for delivery') then 'in_progress'
-  when lower(trim(status)) in ('completed', 'complete', 'paid', 'delivered') then 'completed'
+  when lower(trim(status)) in ('completed', 'complete', 'paid') then 'completed'
+  when lower(trim(status)) in ('delivered') then 'delivered'
   when lower(trim(status)) in ('cancelled', 'canceled') then 'cancelled'
   else 'pending'
 end;
@@ -42,7 +43,7 @@ end $$;
 -- Add the correct production constraint.
 alter table public.orders
   add constraint orders_status_check
-  check (status in ('pending', 'in_progress', 'completed', 'cancelled'));
+  check (status in ('pending', 'in_progress', 'completed', 'delivered', 'cancelled'));
 
 alter table public.orders
   alter column status set default 'pending';
