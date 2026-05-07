@@ -53,6 +53,17 @@
   margin: 0 0 1rem;
 }
 
+.checkout-profile-loading {
+  background: #fff4f7;
+  border: 1px solid rgba(243, 198, 207, 0.72);
+  border-radius: 14px;
+  color: #9b5a6f;
+  font-size: 0.86rem;
+  font-weight: 800;
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.85rem;
+}
+
 .checkout-items-card,
 .checkout-card:not(.checkout-summary) {
   grid-column: 1;
@@ -148,6 +159,12 @@
 .checkout-fields textarea:focus {
   border-color: #d98fae;
   box-shadow: 0 0 0 4px rgba(232, 160, 191, 0.16);
+}
+
+.checkout-fields input:disabled,
+.checkout-fields textarea:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .checkout-fields input::placeholder,

@@ -30,6 +30,10 @@ create index if not exists payments_order_id_idx on public.payments(order_id);
 create index if not exists payments_user_id_idx on public.payments(user_id);
 create index if not exists payments_payment_status_idx on public.payments(payment_status);
 
+insert into storage.buckets (id, name, public)
+values ('payment-proofs', 'payment-proofs', true)
+on conflict (id) do update set public = true;
+
 insert into public.payments (
   order_id,
   user_id,

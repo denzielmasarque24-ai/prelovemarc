@@ -88,6 +88,29 @@ create table if not exists public.order_items (
   quantity integer not null check (quantity > 0)
 );
 
+-- ===== PAYMENTS TABLE =====
+create table if not exists public.payments (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  customer_name text not null default '',
+  payment_method text not null default 'cod',
+  amount integer not null default 0 check (amount >= 0),
+  payment_status text not null default 'pending',
+  proof_of_payment text,
+  reference_number text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.payments add column if not exists user_id uuid references auth.users(id) on delete set null;
+alter table public.payments add column if not exists customer_name text not null default '';
+alter table public.payments add column if not exists payment_method text not null default 'cod';
+alter table public.payments add column if not exists amount integer not null default 0;
+alter table public.payments add column if not exists payment_status text not null default 'pending';
+alter table public.payments add column if not exists proof_of_payment text;
+alter table public.payments add column if not exists reference_number text;
+alter table public.payments add column if not exists created_at timestamptz not null default now();
+
 -- ===== CART ITEMS TABLE =====
 create table if not exists public.cart_items (
   id uuid primary key default gen_random_uuid(),
@@ -133,6 +156,7 @@ alter table public.users disable row level security;
 alter table public.products disable row level security;
 alter table public.orders disable row level security;
 alter table public.order_items disable row level security;
+alter table public.payments disable row level security;
 alter table public.cart_items disable row level security;
 alter table public.contact_messages disable row level security;
 alter table public.contact_message_replies disable row level security;

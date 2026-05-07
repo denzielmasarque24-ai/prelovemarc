@@ -26,7 +26,36 @@ export default function AdminPaymentsPage() {
         if (paymentError) throw new Error(paymentError.message);
 
         if (paymentRows && paymentRows.length > 0) {
-          setPayments(paymentRows as Payment[]);
+          const paymentRecords = paymentRows as Payment[];
+          const missingProofOrderIds = paymentRecords
+            .filter((payment) => !payment.proof_of_payment)
+            .map((payment) => payment.order_id);
+
+          if (missingProofOrderIds.length) {
+            const { data: proofRows, error: proofError } = await supabase
+              .from('orders')
+              .select('id, payment_proof')
+              .in('id', missingProofOrderIds);
+
+            if (!proofError) {
+              const proofByOrderId = new Map(
+                ((proofRows ?? []) as { id: string; payment_proof: string | null }[]).map((order) => [
+                  order.id,
+                  order.payment_proof,
+                ]),
+              );
+
+              setPayments(
+                paymentRecords.map((payment) => ({
+                  ...payment,
+                  proof_of_payment: payment.proof_of_payment ?? proofByOrderId.get(payment.order_id) ?? null,
+                })),
+              );
+              return;
+            }
+          }
+
+          setPayments(paymentRecords);
           return;
         }
 

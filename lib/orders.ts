@@ -148,6 +148,68 @@ async function removeSavedOrder(orderId: string) {
   await supabase.from("orders").delete().eq("id", orderId);
 }
 
+function isMissingProofOfPaymentColumn(error: { message?: string; code?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+  return (
+    error.code === "PGRST204" &&
+    message.includes("proof_of_payment") &&
+    message.includes("schema cache")
+  );
+}
+
+async function insertPaymentRecord(input: {
+  orderId: string;
+  userId: string | null;
+  customerName: string;
+  paymentMethod: PaymentMethod;
+  total: number;
+  paymentStatus: string;
+  paymentProof?: string;
+  referenceNumber?: string;
+}) {
+  const payload = {
+    id: crypto.randomUUID(),
+    order_id: input.orderId,
+    user_id: input.userId,
+    customer_name: input.customerName,
+    payment_method: input.paymentMethod,
+    amount: input.total,
+    payment_status: input.paymentStatus,
+    proof_of_payment: input.paymentProof ?? null,
+    reference_number: input.referenceNumber ?? null,
+  };
+
+  const { error } = await supabase.from("payments").insert(payload);
+
+  if (!error) {
+    return;
+  }
+
+  if (!isMissingProofOfPaymentColumn(error)) {
+    throw new Error(error.message);
+  }
+
+  const fallbackPayload: Omit<typeof payload, "proof_of_payment"> = {
+    id: payload.id,
+    order_id: payload.order_id,
+    user_id: payload.user_id,
+    customer_name: payload.customer_name,
+    payment_method: payload.payment_method,
+    amount: payload.amount,
+    payment_status: payload.payment_status,
+    reference_number: payload.reference_number,
+  };
+  const { error: fallbackError } = await supabase.from("payments").insert(fallbackPayload);
+
+  if (fallbackError) {
+    throw new Error(fallbackError.message);
+  }
+
+  console.warn(
+    "Saved payment without proof_of_payment because the payments table is missing the column. Run data/fix-payments-proof-of-payment.sql in Supabase.",
+  );
+}
+
 export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<string> {
   const orderId = crypto.randomUUID();
   const databaseItems = getDatabaseCartItems(input.items);
@@ -199,21 +261,20 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<str
 
   // Insert payment record — always in sync with the order
   const paymentStatus = input.paymentMethod === "cod" ? "pending" : "completed";
-  const { error: paymentError } = await supabase.from("payments").insert({
-    id: crypto.randomUUID(),
-    order_id: orderId,
-    user_id: userId,
-    customer_name: input.customerName,
-    payment_method: input.paymentMethod,
-    amount: input.total,
-    payment_status: paymentStatus,
-    proof_of_payment: input.paymentProof ?? null,
-    reference_number: input.referenceNumber ?? null,
-  });
-
-  if (paymentError) {
+  try {
+    await insertPaymentRecord({
+      orderId,
+      userId,
+      customerName: input.customerName,
+      paymentMethod: input.paymentMethod,
+      total: input.total,
+      paymentStatus,
+      paymentProof: input.paymentProof,
+      referenceNumber: input.referenceNumber,
+    });
+  } catch (paymentError) {
     await removeSavedOrder(orderId);
-    throw new Error(paymentError.message);
+    throw paymentError;
   }
 
   try {

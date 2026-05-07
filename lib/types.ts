@@ -31,6 +31,10 @@ export interface Profile {
   phone?: string | null;
   avatar?: string | null;
   address?: string | null;
+  barangay?: string | null;
+  city?: string | null;
+  province?: string | null;
+  zip_code?: string | null;
   role?: string | null;
   created_at?: string | null;
 }

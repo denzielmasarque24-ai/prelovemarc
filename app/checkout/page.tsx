@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getProfile, updateProfile } from "@/lib/auth";
 import { clearCart, getCart, hydrateCartFromSupabase, refreshCartStock } from "@/lib/storage";
 import { placeCheckoutOrder, type DeliveryOption, type PaymentMethod } from "@/lib/orders";
+import { supabase } from "@/lib/supabaseClient";
 import type { CartItem } from "@/lib/types";
 import "./checkout.css";
 import { formatPrice } from "@/lib/format";
@@ -32,6 +34,10 @@ export default function CheckoutPage() {
   const [paymentProofName, setPaymentProofName] = useState("");
   const [paymentFeedback, setPaymentFeedback] = useState("");
   const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
+  const [isProofUploading, setIsProofUploading] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [shouldSaveProfile, setShouldSaveProfile] = useState(false);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,6 +54,36 @@ export default function CheckoutPage() {
       window.removeEventListener("cart-updated", syncCart);
       window.removeEventListener("storage", syncCart);
     };
+  }, []);
+
+  useEffect(() => {
+    const loadCheckoutProfile = async () => {
+      setIsProfileLoading(true);
+
+      try {
+        const profile = await getProfile();
+
+        if (!profile) {
+          return;
+        }
+
+        setShouldSaveProfile(true);
+        setCustomerName(profile.full_name?.trim() ?? "");
+        setPhone(profile.phone?.trim() ?? "");
+        setStreetAddress(profile.address?.trim() ?? "");
+        setBarangay(profile.barangay?.trim() ?? "");
+        setCity(profile.city?.trim() ?? "");
+        setProvince(profile.province?.trim() ?? "");
+        setZipCode(profile.zip_code?.trim() ?? "");
+        setProfileAvatarUrl(profile.avatar?.trim() ?? "");
+      } catch (profileError) {
+        console.error("Failed to load checkout profile:", profileError);
+      } finally {
+        setIsProfileLoading(false);
+      }
+    };
+
+    void loadCheckoutProfile();
   }, []);
 
   const subtotal = useMemo(
@@ -74,11 +110,38 @@ export default function CheckoutPage() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
       setPaymentProofPreview(result);
-      setPaymentProofUrl(result);
       setPaymentProofName(file.name);
       setPaymentFeedback("");
     };
     reader.readAsDataURL(file);
+
+    void (async () => {
+      setPaymentFeedback("Uploading proof...");
+      setIsProofUploading(true);
+
+      try {
+        const safeName = file.name.replace(/[^a-z0-9.-]/gi, "-").toLowerCase();
+        const filePath = `checkout/${crypto.randomUUID()}-${safeName}`;
+        const { error: uploadError } = await supabase.storage
+          .from("payment-proofs")
+          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        const { data } = supabase.storage.from("payment-proofs").getPublicUrl(filePath);
+        setPaymentProofUrl(data.publicUrl);
+        setPaymentFeedback("Proof uploaded successfully");
+      } catch (uploadError) {
+        console.error("Failed to upload proof:", uploadError);
+        setPaymentProofUrl("");
+        setPaymentFeedback("");
+        setError(uploadError instanceof Error ? uploadError.message : "Unable to upload proof of payment.");
+      } finally {
+        setIsProofUploading(false);
+      }
+    })();
   };
 
   const handlePaymentSubmit = async () => {
@@ -120,8 +183,26 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (isProofUploading) {
+      setError("Please wait for your proof of payment to finish uploading.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      if (shouldSaveProfile) {
+        await updateProfile({
+          fullName: customerName,
+          phone,
+          address: streetAddress,
+          barangay,
+          city,
+          province,
+          zipCode,
+          avatarUrl: profileAvatarUrl,
+        });
+      }
+
       const refreshedCart = await refreshCartStock(cartItems);
       setCartItems(refreshedCart);
 
@@ -204,14 +285,30 @@ export default function CheckoutPage() {
 
           <section className="checkout-card">
             <h2>Customer Details</h2>
+            {isProfileLoading && <p className="checkout-profile-loading">Loading your saved details...</p>}
             <div className="checkout-fields">
               <label>
                 Full Name
-                <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} autoComplete="name" required />
+                <input
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  autoComplete="name"
+                  placeholder="Full Name"
+                  disabled={isProfileLoading}
+                  required
+                />
               </label>
               <label>
                 Phone Number
-                <input value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" inputMode="tel" required />
+                <input
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="Phone Number"
+                  disabled={isProfileLoading}
+                  required
+                />
               </label>
               <label>
                 Notes
@@ -241,23 +338,57 @@ export default function CheckoutPage() {
               <div className="checkout-fields address-fields">
                 <label className="wide-field">
                   Street Address
-                  <input value={streetAddress} onChange={(event) => setStreetAddress(event.target.value)} autoComplete="street-address" required />
+                  <input
+                    value={streetAddress}
+                    onChange={(event) => setStreetAddress(event.target.value)}
+                    autoComplete="street-address"
+                    placeholder="Street Address"
+                    disabled={isProfileLoading}
+                    required
+                  />
                 </label>
                 <label>
                   Barangay
-                  <input value={barangay} onChange={(event) => setBarangay(event.target.value)} required />
+                  <input
+                    value={barangay}
+                    onChange={(event) => setBarangay(event.target.value)}
+                    placeholder="Barangay"
+                    disabled={isProfileLoading}
+                    required
+                  />
                 </label>
                 <label>
                   City
-                  <input value={city} onChange={(event) => setCity(event.target.value)} autoComplete="address-level2" required />
+                  <input
+                    value={city}
+                    onChange={(event) => setCity(event.target.value)}
+                    autoComplete="address-level2"
+                    placeholder="City"
+                    disabled={isProfileLoading}
+                    required
+                  />
                 </label>
                 <label>
                   Province
-                  <input value={province} onChange={(event) => setProvince(event.target.value)} autoComplete="address-level1" required />
+                  <input
+                    value={province}
+                    onChange={(event) => setProvince(event.target.value)}
+                    autoComplete="address-level1"
+                    placeholder="Province"
+                    disabled={isProfileLoading}
+                    required
+                  />
                 </label>
                 <label>
                   Zip Code
-                  <input value={zipCode} onChange={(event) => setZipCode(event.target.value)} autoComplete="postal-code" inputMode="numeric" />
+                  <input
+                    value={zipCode}
+                    onChange={(event) => setZipCode(event.target.value)}
+                    autoComplete="postal-code"
+                    inputMode="numeric"
+                    placeholder="Zip Code"
+                    disabled={isProfileLoading}
+                  />
                 </label>
               </div>
             )}
@@ -332,7 +463,7 @@ export default function CheckoutPage() {
                   <div className="gcash-proof-grid">
                     <label className="gcash-upload-box">
                       <input type="file" accept="image/*" onChange={(event) => handleProofUpload(event.target.files?.[0])} />
-                      <span>Upload image proof</span>
+                      <span>{isProofUploading ? "Uploading proof..." : "Upload image proof"}</span>
                       <small>{paymentProofName || "PNG, JPG, or screenshot"}</small>
                     </label>
 
@@ -363,7 +494,7 @@ export default function CheckoutPage() {
                     type="button"
                     className="gcash-submit-button"
                     onClick={handlePaymentSubmit}
-                    disabled={!referenceNumber.trim() || isPaymentSubmitting}
+                    disabled={!referenceNumber.trim() || isPaymentSubmitting || isProofUploading}
                   >
                     {isPaymentSubmitting ? "Submitting..." : "Submit Payment"}
                   </button>
@@ -389,7 +520,7 @@ export default function CheckoutPage() {
 
             {error && <p className="checkout-error">{error}</p>}
 
-            <button type="submit" className="place-order-button" disabled={isSubmitting}>
+            <button type="submit" className="place-order-button" disabled={isSubmitting || isProfileLoading}>
               {isSubmitting ? "Placing Order..." : "Place Order"}
             </button>
           </aside>

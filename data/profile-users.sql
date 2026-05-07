@@ -9,6 +9,10 @@ create table if not exists public.profiles (
   full_name   text        not null default 'User',
   phone       text        not null default '',
   address     text        not null default '',
+  barangay    text        not null default '',
+  city        text        not null default '',
+  province    text        not null default '',
+  zip_code    text        not null default '',
   avatar      text        not null default '',
   role        text        not null default 'user',
   created_at  timestamptz not null default now()
@@ -18,6 +22,10 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists full_name  text        not null default 'User';
 alter table public.profiles add column if not exists phone      text        not null default '';
 alter table public.profiles add column if not exists address    text        not null default '';
+alter table public.profiles add column if not exists barangay   text        not null default '';
+alter table public.profiles add column if not exists city       text        not null default '';
+alter table public.profiles add column if not exists province   text        not null default '';
+alter table public.profiles add column if not exists zip_code   text        not null default '';
 alter table public.profiles add column if not exists avatar     text        not null default '';
 alter table public.profiles add column if not exists role       text        not null default 'user';
 alter table public.profiles add column if not exists created_at timestamptz not null default now();
@@ -31,6 +39,10 @@ update public.profiles set
   full_name = coalesce(nullif(trim(full_name), ''), 'User'),
   phone     = coalesce(phone, ''),
   address   = coalesce(address, ''),
+  barangay  = coalesce(barangay, ''),
+  city      = coalesce(city, ''),
+  province  = coalesce(province, ''),
+  zip_code  = coalesce(zip_code, ''),
   avatar    = coalesce(avatar, ''),
   role      = case
                 when id in (

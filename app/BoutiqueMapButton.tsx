@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import styles from "./page.module.css";
 
 const mapQuery = "Pardo New State, Cebu City, Philippines";
-const mapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`;
-const mapOpenUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+const encodedMapQuery = encodeURIComponent(mapQuery);
+const mapEmbedUrl = `https://maps.google.com/maps?q=${encodedMapQuery}&z=18&iwloc=B&output=embed`;
+const mapOpenUrl = `https://www.google.com/maps/search/?api=1&query=${encodedMapQuery}`;
 
 export default function BoutiqueMapButton() {
   const [isOpen, setIsOpen] = useState(false);

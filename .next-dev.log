@@ -9,3 +9,4 @@
 ✓ Ready in 717ms
 Creating turbopack project { dir: 'C:\\Capstone1', testMode: true }
 
+ GET /shop 200 in 487ms (next.js: 253ms, application-code: 234ms)

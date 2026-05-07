@@ -23,6 +23,10 @@ alter table public.payments add column if not exists customer_name    text not n
 alter table public.payments add column if not exists proof_of_payment text;
 alter table public.payments add column if not exists reference_number text;
 
+insert into storage.buckets (id, name, public)
+values ('payment-proofs', 'payment-proofs', true)
+on conflict (id) do update set public = true;
+
 -- 3. Disable RLS for development
 alter table public.payments disable row level security;
 

@@ -2,7 +2,8 @@ import { Profile } from "@/lib/types";
 import { isSupabaseConfigured, logSupabaseError, supabase } from "@/lib/supabase";
 import { clearSession, setSession } from "@/lib/storage";
 
-const profileColumns = "id, full_name, phone, avatar, address, role, created_at";
+const baseProfileColumns = "id, full_name, phone, avatar, address, role, created_at";
+const profileColumns = `${baseProfileColumns}, barangay, city, province, zip_code`;
 
 type ProfileRow = {
   full_name: string | null;
@@ -58,25 +59,47 @@ export async function upsertProfile(payload: {
   fullName: string;
   phone?: string;
   address?: string;
+  barangay?: string;
+  city?: string;
+  province?: string;
+  zipCode?: string;
   avatar?: string;
   role?: string;
 }) {
   try {
-    const { error } = await supabase.from("profiles").upsert(
-      {
-        id: payload.id,
-        full_name: payload.fullName || "User",
-        phone: payload.phone ?? "",
-        address: payload.address ?? "",
-        avatar: payload.avatar ?? "",
-        role: payload.role ?? "user",
-      },
-      { onConflict: "id" },
-    );
+    const profilePayload = {
+      id: payload.id,
+      full_name: payload.fullName || "User",
+      phone: payload.phone ?? "",
+      address: payload.address ?? "",
+      barangay: payload.barangay ?? "",
+      city: payload.city ?? "",
+      province: payload.province ?? "",
+      zip_code: payload.zipCode ?? "",
+      avatar: payload.avatar ?? "",
+      role: payload.role ?? "user",
+    };
+
+    const { error } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
 
     if (error) {
       logSupabaseError("upsertProfile profiles upsert", error);
-      throw new Error(error.message);
+
+      const { error: fallbackError } = await supabase.from("profiles").upsert(
+        {
+          id: profilePayload.id,
+          full_name: profilePayload.full_name,
+          phone: profilePayload.phone,
+          address: profilePayload.address,
+          avatar: profilePayload.avatar,
+          role: profilePayload.role,
+        },
+        { onConflict: "id" },
+      );
+
+      if (fallbackError) {
+        throw new Error(fallbackError.message);
+      }
     }
   } catch (error) {
     console.error("Unexpected error in upsertProfile:", error);
@@ -115,7 +138,19 @@ export async function getProfile(): Promise<Profile | null> {
 
     if (error) {
       logSupabaseError("getProfile profiles select", error);
-      return null;
+
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("profiles")
+        .select(baseProfileColumns)
+        .eq("id", session.user.id)
+        .maybeSingle<Profile>();
+
+      if (fallbackError) {
+        logSupabaseError("getProfile fallback profiles select", fallbackError);
+        return null;
+      }
+
+      return fallbackData ?? null;
     }
 
     return data ?? null;
@@ -130,6 +165,10 @@ export async function updateProfile(profile: {
   fullName: string;
   phone: string;
   address: string;
+  barangay?: string;
+  city?: string;
+  province?: string;
+  zipCode?: string;
   avatarUrl: string;
 }) {
   const {
@@ -147,20 +186,39 @@ export async function updateProfile(profile: {
     .eq("id", user.id)
     .maybeSingle<{ role: string | null }>();
 
-  const { error: updateError } = await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      full_name: profile.fullName.trim() || "User",
-      phone: profile.phone.trim(),
-      address: profile.address.trim(),
-      avatar: profile.avatarUrl.trim(),
-      role: existing?.role ?? "user",
-    },
-    { onConflict: "id" },
-  );
+  const profilePayload = {
+    id: user.id,
+    full_name: profile.fullName.trim() || "User",
+    phone: profile.phone.trim(),
+    address: profile.address.trim(),
+    barangay: profile.barangay?.trim() ?? "",
+    city: profile.city?.trim() ?? "",
+    province: profile.province?.trim() ?? "",
+    zip_code: profile.zipCode?.trim() ?? "",
+    avatar: profile.avatarUrl.trim(),
+    role: existing?.role ?? "user",
+  };
+
+  const { error: updateError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
 
   if (updateError) {
-    throw new Error(updateError.message);
+    logSupabaseError("updateProfile profiles upsert", updateError);
+
+    const { error: fallbackError } = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        full_name: profilePayload.full_name,
+        phone: profilePayload.phone,
+        address: profilePayload.address,
+        avatar: profilePayload.avatar,
+        role: profilePayload.role,
+      },
+      { onConflict: "id" },
+    );
+
+    if (fallbackError) {
+      throw new Error(fallbackError.message);
+    }
   }
 
   await syncSessionFromUser(user.id, user.email);
