@@ -35,6 +35,16 @@ function readString(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function isMissingStockDeductedColumn(error: { message?: string; code?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+  return message.includes("stock_deducted") && (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    message.includes("does not exist") ||
+    message.includes("schema cache")
+  );
+}
+
 function normalizeProduct(row: ProductRow): Product {
   const rawCategory = readString(row.category, "tops").toLowerCase();
   const category = validCategories.includes(rawCategory as Product["category"])
@@ -77,6 +87,11 @@ export async function adminUpdateOrderStatus(orderId: string, status: OrderStatu
     .eq("id", orderId)
     .maybeSingle();
 
+  if (orderError && isMissingStockDeductedColumn(orderError)) {
+    throw new Error(
+      "Missing orders.stock_deducted column. Run data/fix-orders-stock-deducted-column.sql in Supabase, then refresh the app.",
+    );
+  }
   if (orderError) throw new Error(orderError.message);
   if (!order) throw new Error("Order not found.");
 

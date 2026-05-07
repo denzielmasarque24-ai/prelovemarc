@@ -222,6 +222,10 @@ export async function updateProfile(profile: {
   }
 
   await syncSessionFromUser(user.id, user.email);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("profile-updated"));
+  }
 }
 
 export async function ensureBrowserSession() {

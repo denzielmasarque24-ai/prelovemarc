@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getProfile, updateProfile } from "@/lib/auth";
+import { getProfile } from "@/lib/auth";
 import { clearCart, getCart, hydrateCartFromSupabase, refreshCartStock } from "@/lib/storage";
 import { placeCheckoutOrder, type DeliveryOption, type PaymentMethod } from "@/lib/orders";
 import { supabase } from "@/lib/supabaseClient";
@@ -36,8 +36,6 @@ export default function CheckoutPage() {
   const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
   const [isProofUploading, setIsProofUploading] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
-  const [shouldSaveProfile, setShouldSaveProfile] = useState(false);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,35 +54,56 @@ export default function CheckoutPage() {
     };
   }, []);
 
-  useEffect(() => {
-    const loadCheckoutProfile = async () => {
+  const loadCheckoutProfile = useCallback(async (showLoading = true) => {
+    if (showLoading) {
       setIsProfileLoading(true);
+    }
 
-      try {
-        const profile = await getProfile();
+    try {
+      const profile = await getProfile();
 
-        if (!profile) {
-          return;
-        }
+      if (!profile) {
+        return;
+      }
 
-        setShouldSaveProfile(true);
-        setCustomerName(profile.full_name?.trim() ?? "");
-        setPhone(profile.phone?.trim() ?? "");
-        setStreetAddress(profile.address?.trim() ?? "");
-        setBarangay(profile.barangay?.trim() ?? "");
-        setCity(profile.city?.trim() ?? "");
-        setProvince(profile.province?.trim() ?? "");
-        setZipCode(profile.zip_code?.trim() ?? "");
-        setProfileAvatarUrl(profile.avatar?.trim() ?? "");
-      } catch (profileError) {
-        console.error("Failed to load checkout profile:", profileError);
-      } finally {
+      setCustomerName(profile.full_name?.trim() ?? "");
+      setPhone(profile.phone?.trim() ?? "");
+      setStreetAddress(profile.address?.trim() ?? "");
+      setBarangay(profile.barangay?.trim() ?? "");
+      setCity(profile.city?.trim() ?? "");
+      setProvince(profile.province?.trim() ?? "");
+      setZipCode(profile.zip_code?.trim() ?? "");
+    } catch (profileError) {
+      console.error("Failed to load checkout profile:", profileError);
+    } finally {
+      if (showLoading) {
         setIsProfileLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCheckoutProfile();
+
+    const refreshSavedProfile = () => {
+      void loadCheckoutProfile(false);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadCheckoutProfile(false);
       }
     };
 
-    void loadCheckoutProfile();
-  }, []);
+    window.addEventListener("profile-updated", refreshSavedProfile);
+    window.addEventListener("focus", refreshSavedProfile);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener("profile-updated", refreshSavedProfile);
+      window.removeEventListener("focus", refreshSavedProfile);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [loadCheckoutProfile]);
 
   const subtotal = useMemo(
     () => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -93,6 +112,12 @@ export default function CheckoutPage() {
   const selectedDeliveryFee = deliveryOption === "delivery" ? deliveryFee : 0;
   const total = subtotal + selectedDeliveryFee;
   const needsProof = paymentMethod === "gcash";
+  const hasSavedDeliveryAddress =
+    streetAddress.trim() &&
+    barangay.trim() &&
+    city.trim() &&
+    province.trim() &&
+    zipCode.trim();
 
   const handleCopyGcash = async () => {
     try {
@@ -173,8 +198,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (deliveryOption === "delivery" && (!streetAddress.trim() || !barangay.trim() || !city.trim() || !province.trim())) {
-      setError("Please complete your delivery address.");
+    if (deliveryOption === "delivery" && !hasSavedDeliveryAddress) {
+      setError("Please complete your saved delivery address in My Profile before checkout.");
       return;
     }
 
@@ -190,19 +215,6 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
     try {
-      if (shouldSaveProfile) {
-        await updateProfile({
-          fullName: customerName,
-          phone,
-          address: streetAddress,
-          barangay,
-          city,
-          province,
-          zipCode,
-          avatarUrl: profileAvatarUrl,
-        });
-      }
-
       const refreshedCart = await refreshCartStock(cartItems);
       setCartItems(refreshedCart);
 
@@ -336,6 +348,10 @@ export default function CheckoutPage() {
 
             {deliveryOption === "delivery" && (
               <div className="checkout-fields address-fields">
+                <div className="checkout-profile-note wide-field">
+                  <span>Using your saved My Profile address.</span>
+                  <Link href="/profile">Edit in My Profile</Link>
+                </div>
                 <label className="wide-field">
                   Street Address
                   <input
@@ -344,6 +360,7 @@ export default function CheckoutPage() {
                     autoComplete="street-address"
                     placeholder="Street Address"
                     disabled={isProfileLoading}
+                    readOnly
                     required
                   />
                 </label>
@@ -354,6 +371,7 @@ export default function CheckoutPage() {
                     onChange={(event) => setBarangay(event.target.value)}
                     placeholder="Barangay"
                     disabled={isProfileLoading}
+                    readOnly
                     required
                   />
                 </label>
@@ -365,6 +383,7 @@ export default function CheckoutPage() {
                     autoComplete="address-level2"
                     placeholder="City"
                     disabled={isProfileLoading}
+                    readOnly
                     required
                   />
                 </label>
@@ -376,6 +395,7 @@ export default function CheckoutPage() {
                     autoComplete="address-level1"
                     placeholder="Province"
                     disabled={isProfileLoading}
+                    readOnly
                     required
                   />
                 </label>
@@ -388,6 +408,8 @@ export default function CheckoutPage() {
                     inputMode="numeric"
                     placeholder="Zip Code"
                     disabled={isProfileLoading}
+                    readOnly
+                    required
                   />
                 </label>
               </div>

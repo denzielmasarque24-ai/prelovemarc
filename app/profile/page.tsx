@@ -9,6 +9,18 @@ import { supabase } from "@/lib/supabaseClient";
 import type { Order, Profile } from "@/lib/types";
 import "./profile.css";
 import { formatPrice } from "@/lib/format";
+
+type ProfileEditForm = {
+  fullName: string;
+  phone: string;
+  address: string;
+  barangay: string;
+  city: string;
+  province: string;
+  zipCode: string;
+  avatarUrl: string;
+};
+
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -27,7 +39,16 @@ export default function ProfilePage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"info" | "orders" | "edit">("info");
-  const [editForm, setEditForm] = useState({ fullName: "", phone: "", address: "", avatarUrl: "" });
+  const [editForm, setEditForm] = useState<ProfileEditForm>({
+    fullName: "",
+    phone: "",
+    address: "",
+    barangay: "",
+    city: "",
+    province: "",
+    zipCode: "",
+    avatarUrl: "",
+  });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
 
@@ -62,6 +83,10 @@ export default function ProfilePage() {
           fullName: profileData.full_name ?? "",
           phone: profileData.phone ?? "",
           address: profileData.address ?? "",
+          barangay: profileData.barangay ?? "",
+          city: profileData.city ?? "",
+          province: profileData.province ?? "",
+          zipCode: profileData.zip_code ?? "",
           avatarUrl: profileData.avatar ?? "",
         });
       } catch (loadError) {
@@ -76,14 +101,29 @@ export default function ProfilePage() {
 
   const displayName = profile?.full_name?.trim() || "User";
   const avatarUrl = profile?.avatar?.trim();
+  const savedAddress = [
+    profile?.address,
+    profile?.barangay,
+    profile?.city,
+    profile?.province,
+    profile?.zip_code,
+  ]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(", ");
 
   const infoItems = useMemo(
     () => [
       { label: "Full Name", value: profile?.full_name?.trim() || "-" },
       { label: "Phone", value: profile?.phone?.trim() || "-" },
-      { label: "Address", value: profile?.address?.trim() || "-" },
+      { label: "Street Address", value: profile?.address?.trim() || "-" },
+      { label: "Barangay", value: profile?.barangay?.trim() || "-" },
+      { label: "City", value: profile?.city?.trim() || "-" },
+      { label: "Province", value: profile?.province?.trim() || "-" },
+      { label: "Zip Code", value: profile?.zip_code?.trim() || "-" },
+      { label: "Checkout Address", value: savedAddress || "-" },
     ],
-    [profile],
+    [profile, savedAddress],
   );
 
   const handleSaveProfile = async () => {
@@ -91,6 +131,11 @@ export default function ProfilePage() {
     setSaveMsg("");
 
     try {
+      if (!editForm.address.trim() || !editForm.barangay.trim() || !editForm.city.trim() || !editForm.province.trim()) {
+        setSaveMsg("Street address, barangay, city, and province are required.");
+        return;
+      }
+
       await updateProfile(editForm);
       const updated = await getProfile();
       if (!updated) {
@@ -214,12 +259,20 @@ export default function ProfilePage() {
             {[
               { label: "Full Name", key: "fullName" as const },
               { label: "Phone", key: "phone" as const },
-              { label: "Address", key: "address" as const },
+              { label: "Street Address", key: "address" as const, required: true },
+              { label: "Barangay", key: "barangay" as const, required: true },
+              { label: "City", key: "city" as const, required: true },
+              { label: "Province", key: "province" as const, required: true },
+              { label: "Zip Code", key: "zipCode" as const },
               { label: "Avatar URL", key: "avatarUrl" as const },
-            ].map(({ label, key }) => (
+            ].map(({ label, key, required }) => (
               <div className="profile-field" key={key}>
                 <label>{label}</label>
-                <input value={editForm[key]} onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })} />
+                <input
+                  value={editForm[key]}
+                  onChange={(event) => setEditForm({ ...editForm, [key]: event.target.value })}
+                  required={required}
+                />
               </div>
             ))}
             <button type="button" className="profile-save-button" onClick={handleSaveProfile} disabled={saving}>

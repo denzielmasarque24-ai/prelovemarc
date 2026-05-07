@@ -13,10 +13,14 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [address, setAddress] = useState("");
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
+    address: "",
+    barangay: "",
+    city: "",
+    province: "",
+    zipCode: "",
     avatarUrl: "",
   });
 
@@ -54,9 +58,13 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
         setFormData({
           fullName: profile.full_name ?? "User",
           phone: profile.phone ?? "",
+          address: profile.address ?? "",
+          barangay: profile.barangay ?? "",
+          city: profile.city ?? "",
+          province: profile.province ?? "",
+          zipCode: profile.zip_code ?? "",
           avatarUrl: profile.avatar ?? "",
         });
-        setAddress(profile.address || "");
       } catch (profileError) {
         console.error("Failed to load profile:", profileError);
         setError(
@@ -82,10 +90,15 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
       return;
     }
 
+    if (!formData.address.trim() || !formData.barangay.trim() || !formData.city.trim() || !formData.province.trim()) {
+      setError("Street address, barangay, city, and province are required.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      await updateProfile({ ...formData, address });
+      await updateProfile(formData);
       setSuccess("Profile updated.");
       onSaved();
       window.setTimeout(onClose, 600);
@@ -153,16 +166,27 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
               />
             </div>
 
-            <div className="profile-field">
-              <label htmlFor="profile-address">Address</label>
-              <input
-                id="profile-address"
-                type="text"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                autoComplete="street-address"
-              />
-            </div>
+            {[
+              { id: "profile-address", label: "Street Address", key: "address" as const, autoComplete: "street-address", required: true },
+              { id: "profile-barangay", label: "Barangay", key: "barangay" as const, required: true },
+              { id: "profile-city", label: "City", key: "city" as const, autoComplete: "address-level2", required: true },
+              { id: "profile-province", label: "Province", key: "province" as const, autoComplete: "address-level1", required: true },
+              { id: "profile-zip", label: "Zip Code", key: "zipCode" as const, autoComplete: "postal-code" },
+            ].map((field) => (
+              <div className="profile-field" key={field.key}>
+                <label htmlFor={field.id}>{field.label}</label>
+                <input
+                  id={field.id}
+                  type="text"
+                  value={formData[field.key]}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, [field.key]: event.target.value }))
+                  }
+                  autoComplete={field.autoComplete}
+                  required={field.required}
+                />
+              </div>
+            ))}
 
             <div className="profile-field">
               <label htmlFor="profile-avatar">Profile Picture URL</label>
