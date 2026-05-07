@@ -90,8 +90,14 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
       return;
     }
 
-    if (!formData.address.trim() || !formData.barangay.trim() || !formData.city.trim() || !formData.province.trim()) {
-      setError("Street address, barangay, city, and province are required.");
+    if (
+      !formData.address.trim() ||
+      !formData.barangay.trim() ||
+      !formData.city.trim() ||
+      !formData.province.trim() ||
+      !formData.zipCode.trim()
+    ) {
+      setError("Street address, barangay, city, province, and zip code are required.");
       return;
     }
 
@@ -171,7 +177,7 @@ export default function EditProfileModal({ onClose, onSaved }: EditProfileModalP
               { id: "profile-barangay", label: "Barangay", key: "barangay" as const, required: true },
               { id: "profile-city", label: "City", key: "city" as const, autoComplete: "address-level2", required: true },
               { id: "profile-province", label: "Province", key: "province" as const, autoComplete: "address-level1", required: true },
-              { id: "profile-zip", label: "Zip Code", key: "zipCode" as const, autoComplete: "postal-code" },
+              { id: "profile-zip", label: "Zip Code", key: "zipCode" as const, autoComplete: "postal-code", required: true },
             ].map((field) => (
               <div className="profile-field" key={field.key}>
                 <label htmlFor={field.id}>{field.label}</label>

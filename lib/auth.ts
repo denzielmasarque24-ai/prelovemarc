@@ -27,6 +27,26 @@ function isMissingAuthSessionError(error: unknown) {
   );
 }
 
+function getProfileAddressSchemaErrorMessage() {
+  return "Your profiles table is missing one or more address columns. Run data/fix-profile-address-fields.sql in Supabase, then refresh the app.";
+}
+
+function isMissingProfileAddressColumnError(error: { message?: string; code?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+  const mentionsAddressColumn = ["barangay", "city", "province", "zip_code"].some((column) =>
+    message.includes(column),
+  );
+
+  return (
+    mentionsAddressColumn &&
+    (error.code === "42703" ||
+      error.code === "PGRST204" ||
+      message.includes("schema cache") ||
+      message.includes("does not exist") ||
+      message.includes("could not find"))
+  );
+}
+
 export async function syncSessionFromUser(userId: string, email?: string | null) {
   try {
     const { data, error } = await supabase
@@ -84,22 +104,11 @@ export async function upsertProfile(payload: {
 
     if (error) {
       logSupabaseError("upsertProfile profiles upsert", error);
-
-      const { error: fallbackError } = await supabase.from("profiles").upsert(
-        {
-          id: profilePayload.id,
-          full_name: profilePayload.full_name,
-          phone: profilePayload.phone,
-          address: profilePayload.address,
-          avatar: profilePayload.avatar,
-          role: profilePayload.role,
-        },
-        { onConflict: "id" },
-      );
-
-      if (fallbackError) {
-        throw new Error(fallbackError.message);
+      if (isMissingProfileAddressColumnError(error)) {
+        throw new Error(getProfileAddressSchemaErrorMessage());
       }
+
+      throw new Error(error.message);
     }
   } catch (error) {
     console.error("Unexpected error in upsertProfile:", error);
@@ -138,19 +147,11 @@ export async function getProfile(): Promise<Profile | null> {
 
     if (error) {
       logSupabaseError("getProfile profiles select", error);
-
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from("profiles")
-        .select(baseProfileColumns)
-        .eq("id", session.user.id)
-        .maybeSingle<Profile>();
-
-      if (fallbackError) {
-        logSupabaseError("getProfile fallback profiles select", fallbackError);
-        return null;
+      if (isMissingProfileAddressColumnError(error)) {
+        throw new Error(getProfileAddressSchemaErrorMessage());
       }
 
-      return fallbackData ?? null;
+      return null;
     }
 
     return data ?? null;
@@ -203,22 +204,11 @@ export async function updateProfile(profile: {
 
   if (updateError) {
     logSupabaseError("updateProfile profiles upsert", updateError);
-
-    const { error: fallbackError } = await supabase.from("profiles").upsert(
-      {
-        id: user.id,
-        full_name: profilePayload.full_name,
-        phone: profilePayload.phone,
-        address: profilePayload.address,
-        avatar: profilePayload.avatar,
-        role: profilePayload.role,
-      },
-      { onConflict: "id" },
-    );
-
-    if (fallbackError) {
-      throw new Error(fallbackError.message);
+    if (isMissingProfileAddressColumnError(updateError)) {
+      throw new Error(getProfileAddressSchemaErrorMessage());
     }
+
+    throw new Error(updateError.message);
   }
 
   await syncSessionFromUser(user.id, user.email);

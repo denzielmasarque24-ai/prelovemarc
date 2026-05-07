@@ -131,8 +131,14 @@ export default function ProfilePage() {
     setSaveMsg("");
 
     try {
-      if (!editForm.address.trim() || !editForm.barangay.trim() || !editForm.city.trim() || !editForm.province.trim()) {
-        setSaveMsg("Street address, barangay, city, and province are required.");
+      if (
+        !editForm.address.trim() ||
+        !editForm.barangay.trim() ||
+        !editForm.city.trim() ||
+        !editForm.province.trim() ||
+        !editForm.zipCode.trim()
+      ) {
+        setSaveMsg("Street address, barangay, city, province, and zip code are required.");
         return;
       }
 
@@ -263,7 +269,7 @@ export default function ProfilePage() {
               { label: "Barangay", key: "barangay" as const, required: true },
               { label: "City", key: "city" as const, required: true },
               { label: "Province", key: "province" as const, required: true },
-              { label: "Zip Code", key: "zipCode" as const },
+              { label: "Zip Code", key: "zipCode" as const, required: true },
               { label: "Avatar URL", key: "avatarUrl" as const },
             ].map(({ label, key, required }) => (
               <div className="profile-field" key={key}>
