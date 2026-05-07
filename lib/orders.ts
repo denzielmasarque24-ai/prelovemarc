@@ -135,6 +135,14 @@ async function reduceProductStock(
   }
 }
 
+function notifyProductStockChanged() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new Event("product-stock-updated"));
+}
+
 async function removeSavedOrder(orderId: string) {
   await supabase.from("payments").delete().eq("order_id", orderId);
   await supabase.from("orders").delete().eq("id", orderId);
@@ -203,13 +211,14 @@ export async function placeCheckoutOrder(input: CheckoutOrderInput): Promise<str
     reference_number: input.referenceNumber ?? null,
   });
 
-  // Log but do not throw — order is already saved, payment record is secondary
   if (paymentError) {
-    console.error("Failed to insert payment record:", paymentError.message);
+    await removeSavedOrder(orderId);
+    throw new Error(paymentError.message);
   }
 
   try {
     await reduceProductStock(databaseItems, liveStockById);
+    notifyProductStockChanged();
   } catch (stockError) {
     await removeSavedOrder(orderId);
     throw stockError;

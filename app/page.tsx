@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import BoutiqueMapButton from "./BoutiqueMapButton";
 import ProductCarousel from "@/components/ProductCarousel";
 import styles from "./page.module.css";
 
@@ -103,9 +104,7 @@ export default function HomePage() {
               you build a wardrobe that looks premium, feels light, and wastes less.
             </p>
 
-            <Link href="/contact" className={styles.primaryButton}>
-              Visit the Boutique
-            </Link>
+            <BoutiqueMapButton />
           </div>
         </div>
       </section>

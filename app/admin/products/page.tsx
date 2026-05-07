@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { adminDeleteProduct, adminGetAllProducts, adminUpsertProduct } from '@/lib/admin';
 import { formatPrice } from '@/lib/format';
+import { supabase } from '@/lib/supabaseClient';
 import type { Product, ProductCategory } from '@/lib/types';
 
 const categories: ProductCategory[] = ['tops', 'bottoms', 'dresses'];
@@ -17,7 +18,6 @@ const emptyForm = {
   size: '',
   color: '',
   stock: '',
-  status: 'active' as 'active' | 'inactive',
 };
 
 export default function AdminProductsPage() {
@@ -29,12 +29,27 @@ export default function AdminProductsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const load = () =>
+  const load = useCallback(() =>
     adminGetAllProducts()
       .then(setProducts)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load')), []);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+
+    const handleStockUpdate = () => void load();
+    window.addEventListener('product-stock-updated', handleStockUpdate);
+
+    const channel = supabase
+      .channel('admin-products-stock')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, handleStockUpdate)
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('product-stock-updated', handleStockUpdate);
+      void supabase.removeChannel(channel);
+    };
+  }, [load]);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setShowModal(true); };
   const openEdit = (p: Product) => {
@@ -48,7 +63,6 @@ export default function AdminProductsPage() {
       size: p.size ?? '',
       color: p.color ?? '',
       stock: String(p.stock ?? ''),
-      status: p.status ?? 'active',
     });
     setShowModal(true);
   };
@@ -71,7 +85,6 @@ export default function AdminProductsPage() {
         size: form.size,
         color: form.color,
         stock: Number(form.stock) || 0,
-        status: form.status,
       });
       setShowModal(false);
       void load();
@@ -125,7 +138,6 @@ export default function AdminProductsPage() {
                 <th>Category</th>
                 <th>Price</th>
                 <th>Stock</th>
-                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -150,11 +162,6 @@ export default function AdminProductsPage() {
                       {Number(p.stock ?? 0) <= 0 ? 'No Stock' : p.stock}
                     </span>
                   </td>
-                  <td>
-                    <span className={`status-badge ${p.status === 'active' ? 'status-delivered' : 'status-cancelled'}`}>
-                      {p.status ?? 'active'}
-                    </span>
-                  </td>
                   <td style={{ display: 'flex', gap: '0.4rem' }}>
                     <button type="button" className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => openEdit(p)}>
                       Edit
@@ -165,7 +172,7 @@ export default function AdminProductsPage() {
                   </td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="admin-empty">No products found.</td></tr>
+                <tr><td colSpan={6} className="admin-empty">No products found.</td></tr>
               )}
             </tbody>
           </table>
@@ -192,13 +199,6 @@ export default function AdminProductsPage() {
                   <label>Category</label>
                   <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ProductCategory })}>
                     {categories.map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="admin-field">
-                  <label>Status</label>
-                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
                   </select>
                 </div>
                 <div className="admin-field">

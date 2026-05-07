@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { clearCart, getCart, hydrateCartFromSupabase } from "@/lib/storage";
+import { clearCart, getCart, hydrateCartFromSupabase, refreshCartStock } from "@/lib/storage";
 import { placeCheckoutOrder, type DeliveryOption, type PaymentMethod } from "@/lib/orders";
 import type { CartItem } from "@/lib/types";
 import "./checkout.css";
@@ -38,7 +38,9 @@ export default function CheckoutPage() {
   useEffect(() => {
     const syncCart = () => setCartItems(getCart());
     syncCart();
-    void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
+    void hydrateCartFromSupabase()
+      .then((cart) => refreshCartStock(cart))
+      .then((cart) => setCartItems(cart));
     window.addEventListener("cart-updated", syncCart);
     window.addEventListener("storage", syncCart);
 
@@ -120,6 +122,24 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
     try {
+      const refreshedCart = await refreshCartStock(cartItems);
+      setCartItems(refreshedCart);
+
+      if (!refreshedCart.length) {
+        setError("The selected products are out of stock.");
+        return;
+      }
+
+      const adjustedItem = refreshedCart.find((item) => {
+        const currentItem = cartItems.find((cartItem) => cartItem.id === item.id);
+        return currentItem && currentItem.quantity !== item.quantity;
+      });
+
+      if (adjustedItem) {
+        setError(`Only ${adjustedItem.quantity} ${adjustedItem.name} left in stock. Please review your cart.`);
+        return;
+      }
+
       const orderId = await placeCheckoutOrder({
         customerName: customerName.trim(),
         phone: phone.trim(),
@@ -132,7 +152,7 @@ export default function CheckoutPage() {
         paymentMethod,
         deliveryOption,
         total,
-        items: cartItems,
+        items: refreshedCart,
         referenceNumber: referenceNumber.trim() || undefined,
         paymentProof: paymentProofUrl.trim() || undefined,
       });

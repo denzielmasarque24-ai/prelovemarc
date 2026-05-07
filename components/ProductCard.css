@@ -44,6 +44,24 @@
   position: absolute;
   text-transform: uppercase;
   z-index: 2;
+  pointer-events: none;
+}
+
+.product-image-preview-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: block;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.product-image-preview-button:focus-visible {
+  outline: 3px solid rgba(212, 130, 154, 0.6);
+  outline-offset: -6px;
 }
 
 .product-image {
@@ -54,6 +72,7 @@
   width: 100%;
 }
 
+.product-image-preview-button:hover .product-image,
 .product-card:hover .product-image {
   transform: scale(1.05);
 }

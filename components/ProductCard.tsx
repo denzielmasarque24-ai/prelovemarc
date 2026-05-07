@@ -15,12 +15,13 @@ interface ProductCardProps {
   stock?: number;
   isDetailsOpen: boolean;
   onToggleDetails: (productId: ProductId) => void;
+  onImagePreview?: () => void;
   onAddToCart: () => void;
 }
 
 const FALLBACK = "/images/logo.png";
 
-function resolveImageSrc(raw: string): string {
+export function resolveImageSrc(raw: string): string {
   if (!raw || !raw.trim()) return FALLBACK;
   if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
   if (raw.startsWith("/")) return raw;
@@ -36,6 +37,7 @@ export default function ProductCard({
   stock,
   isDetailsOpen,
   onToggleDetails,
+  onImagePreview = () => undefined,
   onAddToCart,
 }: ProductCardProps) {
   const [imgSrc, setImgSrc] = useState(() => resolveImageSrc(image));
@@ -48,12 +50,19 @@ export default function ProductCard({
     <article className="product-card">
       <div className="product-image-wrapper">
         {outOfStock && <div className="product-out-of-stock-overlay">Out of Stock</div>}
-        <img
-          src={imgSrc}
-          alt={name}
-          className="product-image"
-          onError={() => setImgSrc(FALLBACK)}
-        />
+        <button
+          type="button"
+          className="product-image-preview-button"
+          onClick={onImagePreview}
+          aria-label={`Preview ${name}`}
+        >
+          <img
+            src={imgSrc}
+            alt={name}
+            className="product-image"
+            onError={() => setImgSrc(FALLBACK)}
+          />
+        </button>
       </div>
 
       <div className="product-info">

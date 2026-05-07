@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ProductGrid from '@/components/ProductGrid';
 import { fetchProductsFromSupabase } from '@/lib/supabaseShop';
+import { supabase } from '@/lib/supabaseClient';
 import type { Product } from '@/lib/types';
 
 const categories = ['all', 'tops', 'bottoms', 'dresses'] as const;
@@ -24,9 +25,7 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
   const [maxPrice, setMaxPrice] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { setSelectedCategory(initialCategory); }, [initialCategory]);
-
-  useEffect(() => {
+  const loadProducts = useCallback(() => {
     setIsLoading(true);
     fetchProductsFromSupabase()
       .then((data) => setAllProducts(data ?? []))
@@ -36,6 +35,25 @@ export default function ShopClient({ initialCategory }: ShopClientProps) {
       })
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => { setSelectedCategory(initialCategory); }, [initialCategory]);
+
+  useEffect(() => {
+    loadProducts();
+
+    const handleStockUpdate = () => loadProducts();
+    window.addEventListener('product-stock-updated', handleStockUpdate);
+
+    const channel = supabase
+      .channel('shop-products-stock')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, handleStockUpdate)
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('product-stock-updated', handleStockUpdate);
+      void supabase.removeChannel(channel);
+    };
+  }, [loadProducts]);
 
   const filteredProducts = allProducts.filter((p) => {
     const matchCategory = selectedCategory === 'all' || p.category.toLowerCase() === selectedCategory;

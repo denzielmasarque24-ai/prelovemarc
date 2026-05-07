@@ -253,9 +253,14 @@ export async function hydrateCartFromSupabase() {
         return null;
       }
 
+      const availableStock = typeof product.stock === "number" ? product.stock : null;
+      if (availableStock !== null && availableStock <= 0) {
+        return null;
+      }
+
       return {
         ...product,
-        quantity: row.quantity,
+        quantity: availableStock === null ? row.quantity : Math.min(row.quantity, availableStock),
       };
     })
     .filter((item): item is CartItem => Boolean(item));
@@ -269,6 +274,76 @@ export async function hydrateCartFromSupabase() {
 
   saveCart(mergedCart);
   return mergedCart;
+}
+
+export async function refreshCartStock(cart = getCart()) {
+  const resolvedCart = await resolveSupabaseCartItems(cart);
+  const databaseItems = resolvedCart.filter((item) => isUuid(item.id));
+
+  if (!databaseItems.length) {
+    return resolvedCart;
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .in("id", databaseItems.map((item) => item.id));
+
+  if (error) {
+    console.error("Failed refreshing cart stock:", error);
+    return resolvedCart;
+  }
+
+  const liveProducts = new Map(
+    ((data ?? []) as Record<string, unknown>[]).map((row) => {
+      const id = row.id;
+      const stock = typeof row.stock === "number" ? row.stock : Number(row.stock ?? 0);
+      const image = readStringField(row, ["image", "image_url", "photo", "photo_url"]) ?? "";
+      const price = typeof row.price === "number" ? row.price : Number(row.price ?? 0);
+
+      return [
+        id,
+        {
+          ...row,
+          image,
+          price: Number.isFinite(price) ? price : 0,
+          stock: Number.isFinite(stock) ? stock : 0,
+        } as Product,
+      ];
+    }),
+  );
+
+  let hasChanges = resolvedCart.length !== cart.length;
+  const refreshedCart = resolvedCart
+    .map((item) => {
+      if (!isUuid(item.id)) {
+        return item;
+      }
+
+      const liveProduct = liveProducts.get(item.id);
+      if (!liveProduct || typeof liveProduct.stock !== "number" || liveProduct.stock <= 0) {
+        hasChanges = true;
+        return null;
+      }
+
+      const nextQuantity = Math.min(item.quantity, liveProduct.stock);
+      if (nextQuantity !== item.quantity || liveProduct.stock !== item.stock) {
+        hasChanges = true;
+      }
+
+      return {
+        ...item,
+        ...liveProduct,
+        quantity: nextQuantity,
+      };
+    })
+    .filter((item): item is CartItem => Boolean(item));
+
+  if (hasChanges) {
+    saveCart(refreshedCart);
+  }
+
+  return refreshedCart;
 }
 
 export function setSession(user: SessionUser) {
@@ -302,13 +377,17 @@ export function addToCart(product: Product) {
   const availableStock = typeof product.stock === "number" ? product.stock : null;
 
   if (availableStock !== null && availableStock <= 0) {
-    return;
+    return false;
   }
 
   const cart = getCart();
   const existingItem = cart.find((item) => item.id === product.id);
 
   if (existingItem) {
+    if (availableStock !== null && existingItem.quantity >= availableStock) {
+      return false;
+    }
+
     existingItem.quantity =
       availableStock === null ? existingItem.quantity + 1 : Math.min(existingItem.quantity + 1, availableStock);
   } else {
@@ -316,6 +395,7 @@ export function addToCart(product: Product) {
   }
 
   saveCart(cart);
+  return true;
 }
 
 export function removeFromCart(productId: ProductId) {

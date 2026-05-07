@@ -7,6 +7,7 @@ import {
   clearCart as clearStoredCart,
   getCart,
   hydrateCartFromSupabase,
+  refreshCartStock,
   removeFromCart,
   saveCart,
 } from '@/lib/storage';
@@ -22,11 +23,15 @@ export default function CartPage() {
     };
 
     syncCart();
-    void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
+    void hydrateCartFromSupabase()
+      .then((cart) => refreshCartStock(cart))
+      .then((cart) => setCartItems(cart));
     window.addEventListener('cart-updated', syncCart);
     window.addEventListener('storage', syncCart);
     window.addEventListener('session-updated', () => {
-      void hydrateCartFromSupabase().then((cart) => setCartItems(cart));
+      void hydrateCartFromSupabase()
+        .then((cart) => refreshCartStock(cart))
+        .then((cart) => setCartItems(cart));
     });
 
     return () => {
@@ -39,6 +44,7 @@ export default function CartPage() {
     () => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [cartItems],
   );
+  const hasUnavailableItems = cartItems.some((item) => typeof item.stock === 'number' && item.stock <= 0);
 
   const handleUpdateQuantity = (productId: ProductId, quantity: number) => {
     if (quantity <= 0) {
@@ -109,6 +115,11 @@ export default function CartPage() {
                   <div className="item-details">
                     <h3 className="item-name">{item.name}</h3>
                     <p className="item-price">{formatPrice(item.price)}</p>
+                    {typeof item.stock === 'number' && (
+                      <p className={`item-stock${item.stock <= 0 ? ' item-stock-empty' : ''}`}>
+                        {item.stock <= 0 ? 'No Stock' : `${item.stock} in stock`}
+                      </p>
+                    )}
                   </div>
 
                   <div className="item-quantity">
@@ -164,9 +175,15 @@ export default function CartPage() {
               <span>{formatPrice(total)}</span>
             </div>
 
-            <Link href="/checkout" className="checkout-btn">
-              Proceed to Checkout
-            </Link>
+            {hasUnavailableItems ? (
+              <button type="button" className="checkout-btn checkout-btn-disabled" disabled>
+                Remove out-of-stock items
+              </button>
+            ) : (
+              <Link href="/checkout" className="checkout-btn">
+                Proceed to Checkout
+              </Link>
+            )}
             <Link href="/shop" className="continue-shopping-btn continue-btn">
               Continue Shopping
             </Link>
